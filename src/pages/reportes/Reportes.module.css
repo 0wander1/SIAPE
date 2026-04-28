@@ -1,0 +1,146 @@
+.page { display: flex; flex-direction: column; gap: 24px; }
+
+.pageHeader { display: flex; flex-direction: column; gap: 4px; }
+.title { font-size: 22px; font-weight: 800; color: #0f172a; }
+.subtitle { font-size: 14px; color: #64748b; }
+
+.reportCard {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
+}
+
+.reportHeader {
+  padding: 20px 24px 0;
+}
+
+.reportTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dateRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 16px 24px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+
+.dateField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dateLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dateInput {
+  padding: 8px 12px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #111827;
+  outline: none;
+  background: #f9fafb;
+}
+.dateInput:focus {
+  border-color: #2563eb;
+  background: #fff;
+}
+
+.btnGenerar {
+  padding: 9px 20px;
+  background: #111827;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 7px;
+  transition: background-color 0.15s;
+}
+.btnGenerar:hover { background: #1f2937; }
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.metricCard {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid #f1f5f9;
+}
+.metricCard:last-child { border-right: none; }
+
+.metricLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metricValue {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.metricSub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.chartSection {
+  padding: 24px;
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 16px;
+}
+
+.chartWrap {
+  width: 100%;
+}
+
+.tooltip {
+  background: #0f172a;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.tooltipLabel {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.tooltipValue {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .metrics { grid-template-columns: 1fr; }
+  .metricCard { border-right: none; border-bottom: 1px solid #f1f5f9; }
+}

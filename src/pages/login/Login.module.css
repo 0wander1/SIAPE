@@ -1,0 +1,174 @@
+.page {
+  display: flex;
+  min-height: 100vh;
+}
+
+.left {
+  flex: 1;
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+.leftContent {
+  max-width: 400px;
+  color: #ffffff;
+}
+
+.brand {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  margin-bottom: 8px;
+}
+
+.brandSub {
+  font-size: 16px;
+  color: #bfdbfe;
+  margin-bottom: 48px;
+}
+
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.featureIcon {
+  font-size: 28px;
+  min-width: 36px;
+}
+
+.feature strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.feature p {
+  font-size: 13px;
+  color: #bfdbfe;
+}
+
+.right {
+  width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  padding: 48px;
+}
+
+.formCard {
+  width: 100%;
+  max-width: 360px;
+}
+
+.formHeader {
+  margin-bottom: 32px;
+}
+
+.formTitle {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.formSub {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.input {
+  padding: 12px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #111827;
+  background: #f9fafb;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  background: #fff;
+}
+
+.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 6px;
+}
+
+.submitBtn {
+  padding: 13px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+  margin-top: 4px;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #1f2937;
+}
+
+.submitBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .page {
+    flex-direction: column;
+  }
+  .left {
+    padding: 40px 24px;
+  }
+  .right {
+    width: 100%;
+    padding: 32px 24px;
+  }
+}
