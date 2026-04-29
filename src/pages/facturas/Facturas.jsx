@@ -105,7 +105,9 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
             <Select name='trabajador' value={form.trabajador} onChange={handleChange}>
               <option value=''>Seleccionar...</option>
               {trabajadores.map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre}</option>
+                <option key={t.id ?? t.id_usuario_trab} value={t.id ?? t.id_usuario_trab}>
+                  {t.nombre ?? t.user_name}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -152,19 +154,35 @@ function Facturas() {
     return matchSearch && matchEstado;
   });
 
-  const handleSave = (form) => {
-    setFacturas([...facturas, {
-      id: facturas.length + 1,
-      numeroFactura: form.numeroFactura,
-      fechaEmision: form.fechaEmision,
-      fechaVencimiento: form.fechaVencimiento,
-      subtotal: Number(form.subtotal),
-      impuesto: form.impuesto,
-      descuento: Number(form.descuento) || 0,
-      total: form.total,
-      estado: form.estado,
-      idPedido: form.idPedido,
-    }]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/facturas', {
+        numero_factura:    form.numeroFactura,
+        fecha_emision:     form.fechaEmision,
+        fecha_vencimiento: form.fechaVencimiento || null,
+        subtotal:          Number(form.subtotal),
+        impuesto:          form.impuesto,
+        descuento:         Number(form.descuento) || 0,
+        estado:            form.estado,
+        usuario_trab_id:   Number(form.trabajador) || null,
+        pedido_id_pedido:  form.idPedido,
+      });
+      const { data } = await api.get('/facturas');
+      setFacturas(data);
+    } catch {
+      setFacturas((prev) => [...prev, {
+        id: Date.now(),
+        numeroFactura:    form.numeroFactura,
+        fechaEmision:     form.fechaEmision,
+        fechaVencimiento: form.fechaVencimiento,
+        subtotal:         Number(form.subtotal),
+        impuesto:         form.impuesto,
+        descuento:        Number(form.descuento) || 0,
+        total:            form.total,
+        estado:           form.estado,
+        idPedido:         form.idPedido,
+      }]);
+    }
     setShowModal(false);
   };
 

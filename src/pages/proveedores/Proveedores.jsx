@@ -57,7 +57,9 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
             >
               <option value=''>Seleccionar...</option>
               {trabajadores.map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre}</option>
+                <option key={t.id ?? t.id_usuario_trab} value={t.id ?? t.id_usuario_trab}>
+                  {t.nombre ?? t.user_name}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -129,18 +131,25 @@ function Proveedores() {
       p.nit.includes(search)
   );
 
-  const handleSave = (form) => {
-    setProveedores([
-      ...proveedores,
-      {
-        id: proveedores.length + 1,
+  const handleSave = async (form) => {
+    try {
+      await api.post('/proveedores', {
+        nombre_proveedor: form.nombre,
+        NIT:              form.nit,
+        id_usuario_trab:  Number(form.trabajador) || null,
+      });
+      const { data } = await api.get('/proveedores');
+      setProveedores(data);
+    } catch {
+      setProveedores((prev) => [...prev, {
+        id: Date.now(),
         nombre: form.nombre,
         nit: form.nit,
         pedidosPorEntregar: 0,
         fechaPedidoPendiente: null,
-        idUsuario: Number(form.trabajador) || 1,
-      },
-    ]);
+        idUsuario: Number(form.trabajador) || null,
+      }]);
+    }
     setShowModal(false);
   };
 

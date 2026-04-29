@@ -66,7 +66,9 @@ function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
             <Select name='cliente' value={form.cliente} onChange={handleChange} required>
               <option value=''>Seleccionar cliente...</option>
               {clientes.map((c) => (
-                <option key={c.id} value={c.nombre}>{c.nombre}</option>
+                <option key={c.id ?? c.id_usuario_cli} value={c.id ?? c.id_usuario_cli}>
+                  {c.nombre ?? c.nombre_usuario}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -155,20 +157,40 @@ function Pedidos() {
       .catch(() => {});
   }, []);
 
-  const handleSave = (form) => {
-    const newPedido = {
-      id: `PED-00${pedidos.length + 1}`,
-      cliente: form.cliente,
-      producto: inventario.find((p) => p.id === form.producto)?.nombre || form.producto,
-      cantidad: Number(form.cantidad),
-      estado: form.estado,
-      valorTotal: form.valorTotal,
-      direccion: form.direccion,
-      fechaEstimada: form.fechaEstimada,
-      fechaReal: null,
-      observaciones: form.observaciones,
-    };
-    setPedidos([newPedido, ...pedidos]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/pedidos', {
+        cliente_id_usuario_cli:  Number(form.cliente),
+        producto_id_producto:    form.producto,
+        cantidad:                Number(form.cantidad),
+        estado:                  form.estado,
+        valor_total:             form.valorTotal,
+        direccion_pedido:        form.direccion,
+        fecha_entrega_estimada:  form.fechaEstimada || null,
+        observaciones:           form.observaciones || null,
+      });
+      const { data } = await api.get('/pedidos');
+      setPedidos(data);
+    } catch {
+      const nombreCliente = clientes.find(
+        (c) => (c.id ?? c.id_usuario_cli) == form.cliente
+      )?.nombre ?? clientes.find(
+        (c) => (c.id ?? c.id_usuario_cli) == form.cliente
+      )?.nombre_usuario ?? form.cliente;
+      const nombreProducto = inventario.find((p) => p.id === form.producto)?.nombre || form.producto;
+      setPedidos((prev) => [{
+        id: `PED-00${prev.length + 1}`,
+        cliente: nombreCliente,
+        producto: nombreProducto,
+        cantidad: Number(form.cantidad),
+        estado: form.estado,
+        valorTotal: form.valorTotal,
+        direccion: form.direccion,
+        fechaEstimada: form.fechaEstimada,
+        fechaReal: null,
+        observaciones: form.observaciones,
+      }, ...prev]);
+    }
     setShowModal(false);
   };
 

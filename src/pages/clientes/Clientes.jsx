@@ -57,12 +57,18 @@ function Clientes() {
 
   const filtered = clientes.filter(
     (c) =>
-      c.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      c.correo.toLowerCase().includes(search.toLowerCase())
+      (c.nombre ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.correo ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = (form) => {
-    setClientes([...clientes, { id: clientes.length + 1, ...form }]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/clientes', { nombre_usuario: form.nombre, correo: form.correo });
+      const { data } = await api.get('/clientes');
+      setClientes(data);
+    } catch {
+      setClientes((prev) => [...prev, { id: Date.now(), ...form }]);
+    }
     setShowModal(false);
   };
 

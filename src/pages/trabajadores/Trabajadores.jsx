@@ -103,16 +103,29 @@ function Trabajadores() {
       .catch(() => {});
   }, []);
 
-  const handleSave = (form) => {
-    setTrabajadores([...trabajadores, {
-      id: trabajadores.length + 1,
-      nombre: form.nombre,
-      cargo: form.cargo,
-      direccion: form.direccion,
-      turno: form.turno,
-      celular: form.celular,
-      username: form.username,
-    }]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/trabajadores', {
+        cargo:     form.cargo,
+        direccion: form.direccion || null,
+        turno:     form.turno    || null,
+        celular:   form.celular  || null,
+        user_name: form.username,
+        password:  form.password,
+      });
+      const { data } = await api.get('/trabajadores');
+      setTrabajadores(data);
+    } catch {
+      setTrabajadores((prev) => [...prev, {
+        id: Date.now(),
+        nombre:   form.nombre,
+        cargo:    form.cargo,
+        direccion: form.direccion,
+        turno:    form.turno,
+        celular:  form.celular,
+        user_name: form.username,
+      }]);
+    }
     setShowModal(false);
   };
 
@@ -130,7 +143,7 @@ function Trabajadores() {
           <div key={t.id} className={styles.card}>
             <div className={styles.cardHeader}>
               <div className={styles.avatar}>
-                {t.nombre.charAt(0).toUpperCase()}
+                {(t.nombre || t.user_name || '?').charAt(0).toUpperCase()}
               </div>
               <div className={styles.menuWrap}>
                 <button
@@ -148,7 +161,7 @@ function Trabajadores() {
                 )}
               </div>
             </div>
-            <h4 className={styles.cardName}>{t.nombre}</h4>
+            <h4 className={styles.cardName}>{t.nombre || t.user_name}</h4>
             <p className={styles.cardCargo}>{t.cargo}</p>
             <div className={styles.cardDetails}>
               <span className={styles.turno}>{t.turno}</span>

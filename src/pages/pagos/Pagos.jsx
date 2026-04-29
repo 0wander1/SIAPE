@@ -26,11 +26,14 @@ const emptyForm = {
 function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
   const [form, setForm] = useState(emptyForm);
 
-  const facturaSeleccionada = facturas.find((f) => f.numeroFactura === form.idFactura);
+  // form.idFactura almacena el ID numérico de la factura
+  const facturaSeleccionada = facturas.find(
+    (f) => (f.id ?? f.id_factura) == form.idFactura
+  );
   const montoPendiente = facturaSeleccionada
-    ? facturaSeleccionada.total - pagos
-        .filter((p) => p.idFactura === form.idFactura)
-        .reduce((s, p) => s + p.monto, 0)
+    ? (facturaSeleccionada.total ?? 0) - pagos
+        .filter((p) => (p.factura_id_factura ?? p.idFactura) == form.idFactura)
+        .reduce((s, p) => s + (p.monto_pagado ?? p.monto ?? 0), 0)
     : 0;
 
   const handleSubmit = (e) => {
@@ -49,11 +52,16 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
               required
             >
               <option value=''>Seleccionar factura...</option>
-              {facturas.map((f) => (
-                <option key={f.id} value={f.numeroFactura}>
-                  {f.numeroFactura} — {formatCOP(f.total)}
-                </option>
-              ))}
+              {facturas.map((f) => {
+                const fId  = f.id ?? f.id_factura;
+                const fNum = f.numeroFactura ?? f.numero_factura;
+                const fTotal = f.total ?? 0;
+                return (
+                  <option key={fId} value={fId}>
+                    {fNum} — {formatCOP(fTotal)}
+                  </option>
+                );
+              })}
             </Select>
           </FormField>
           <FormField label='Monto a Registrar (calculado)'>
@@ -94,9 +102,12 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
           <Select value={form.trabajador}
             onChange={(e) => setForm({ ...form, trabajador: e.target.value })}>
             <option value=''>Seleccionar...</option>
-            {trabajadores.map((t) => (
-              <option key={t.id} value={t.nombre}>{t.nombre}</option>
-            ))}
+            {trabajadores.map((t) => {
+              const tId = t.id ?? t.id_usuario_trab;
+              return (
+                <option key={tId} value={tId}>{t.nombre ?? t.user_name}</option>
+              );
+            })}
           </Select>
         </FormField>
 
@@ -140,16 +151,32 @@ function Pagos() {
     return matchSearch && matchMetodo;
   });
 
-  const handleSave = (form) => {
-    setPagos([...pagos, {
-      id: pagos.length + 1,
-      idFactura: form.idFactura,
-      monto: Number(form.monto),
-      fecha: form.fecha,
-      metodo: form.metodo,
-      referencia: form.referencia || '-',
-      registradoPor: form.trabajador || 'Sistema',
-    }]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/pagos', {
+        monto_pagado:               Number(form.monto),
+        fecha_pago:                 form.fecha,
+        metodo_pago:                form.metodo,
+        referencia_transaccion:     form.referencia || null,
+        factura_id_factura:         Number(form.idFactura),
+        usuario_trab_id_usuario_trab: Number(form.trabajador) || null,
+      });
+      const { data } = await api.get('/pagos');
+      setPagos(data);
+    } catch {
+      const trab = trabajadores.find(
+        (t) => (t.id ?? t.id_usuario_trab) == form.trabajador
+      );
+      setPagos((prev) => [...prev, {
+        id: Date.now(),
+        idFactura: form.idFactura,
+        monto: Number(form.monto),
+        fecha: form.fecha,
+        metodo: form.metodo,
+        referencia: form.referencia || '-',
+        registradoPor: trab?.nombre ?? trab?.user_name ?? 'Sistema',
+      }]);
+    }
     setShowModal(false);
   };
 

@@ -67,7 +67,9 @@ function BodegaModal({ onClose, onSave, trabajadores }) {
             <Select name='trabajador' value={form.trabajador} onChange={handleChange}>
               <option value=''>Seleccionar...</option>
               {trabajadores.map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre}</option>
+                <option key={t.id ?? t.id_usuario_trab} value={t.id ?? t.id_usuario_trab}>
+                  {t.nombre ?? t.user_name}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -116,17 +118,32 @@ function Bodegas() {
       b.ciudad.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = (form) => {
-    setBodegas([...bodegas, {
-      id: bodegas.length + 1,
-      descripcion: form.descripcion,
-      ubicacion: form.ubicacion,
-      ciudad: form.ciudad,
-      capacidadMaxima: Number(form.capacidadMaxima),
-      capacidadActual: Number(form.capacidadActual) || 0,
-      tipo: form.tipo,
-      estado: form.estado ? 'Activa' : 'Inactiva',
-    }]);
+  const handleSave = async (form) => {
+    try {
+      await api.post('/bodegas', {
+        descripcion:                form.descripcion,
+        ubicacion:                  form.ubicacion,
+        ciudad:                     form.ciudad,
+        capacidad_maxima:           Number(form.capacidadMaxima),
+        capacidad_actual:           Number(form.capacidadActual) || 0,
+        tipo_bodega:                form.tipo,
+        activa:                     form.estado ? 1 : 0,
+        usuario_trab_id_responsable: Number(form.trabajador) || null,
+      });
+      const { data } = await api.get('/bodegas');
+      setBodegas(data);
+    } catch {
+      setBodegas((prev) => [...prev, {
+        id: Date.now(),
+        descripcion: form.descripcion,
+        ubicacion: form.ubicacion,
+        ciudad: form.ciudad,
+        capacidadMaxima: Number(form.capacidadMaxima),
+        capacidadActual: Number(form.capacidadActual) || 0,
+        tipo: form.tipo,
+        estado: form.estado ? 'Activa' : 'Inactiva',
+      }]);
+    }
     setShowModal(false);
   };
 

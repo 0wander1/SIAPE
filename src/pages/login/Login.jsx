@@ -5,7 +5,7 @@ import styles from './Login.module.css';
 
 function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ user_name: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +21,7 @@ function Login() {
 
     try {
       const { data } = await api.post('/auth/login', {
-        email: form.email,
+        user_name: form.user_name,
         password: form.password,
       });
       localStorage.setItem('siape_token', data.token);
@@ -29,15 +29,15 @@ function Login() {
       navigate('/dashboard');
     } catch {
       // Fallback a credenciales mock
-      if (form.email === 'admin@siape.com' && form.password === '123456') {
+      if (form.user_name === 'admin' && form.password === '123456') {
         localStorage.setItem('siape_token', 'mock-token-123');
         localStorage.setItem(
           'siape_user',
-          JSON.stringify({ name: 'Administrador', role: 'Administrador', email: form.email })
+          JSON.stringify({ user_name: 'admin', cargo: 'Administrador' })
         );
         navigate('/dashboard');
       } else {
-        setError('Correo o contraseña incorrectos.');
+        setError('Usuario o contraseña incorrectos.');
         setLoading(false);
       }
     }
@@ -91,18 +91,19 @@ function Login() {
 
           <form onSubmit={handleSubmit} className={styles.form}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor='email'>
-                Correo Electrónico
+              <label className={styles.label} htmlFor='user_name'>
+                Usuario
               </label>
               <input
-                id='email'
-                name='email'
-                type='email'
+                id='user_name'
+                name='user_name'
+                type='text'
                 className={styles.input}
-                placeholder='correo@empresa.com'
-                value={form.email}
+                placeholder='nombre de usuario'
+                value={form.user_name}
                 onChange={handleChange}
                 required
+                autoComplete='username'
               />
             </div>
 
@@ -130,7 +131,7 @@ function Login() {
           </form>
 
           <p className={styles.hint}>
-            Demo: <strong>admin@siape.com</strong> / <strong>123456</strong>
+            Demo: <strong>admin</strong> / <strong>123456</strong>
           </p>
         </div>
       </div>

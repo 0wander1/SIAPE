@@ -2,30 +2,47 @@ const { pool } = require('../config/db');
 
 const CAMPOS_PERMITIDOS_UPDATE = ['nombre_usuario', 'correo'];
 
+const SQL_SELECT = `
+  SELECT c.id_usuario_cli, u.nombre_usuario, c.correo
+  FROM cliente c
+  INNER JOIN usuario u ON c.id_usuario_cli = u.id_usuario
+`;
+
 async function getAll() {
-  const [rows] = await pool.query(
-    'SELECT * FROM cliente ORDER BY id_usuario_cli DESC'
-  );
+  const [rows] = await pool.query(`${SQL_SELECT} ORDER BY c.id_usuario_cli DESC`);
   return rows;
 }
 
 async function getById(id) {
-  const [rows] = await pool.query(
-    'SELECT * FROM cliente WHERE id_usuario_cli = ?',
-    [id]
-  );
+  const [rows] = await pool.query(`${SQL_SELECT} WHERE c.id_usuario_cli = ?`, [id]);
   return rows[0] || null;
 }
 
 async function create(data) {
   const { nombre_usuario, correo } = data;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  const [result] = await pool.query(
-    'INSERT INTO cliente (nombre_usuario, correo) VALUES (?, ?)',
-    [nombre_usuario, correo]
-  );
+    const [usuarioResult] = await conn.execute(
+      'INSERT INTO usuario (nombre_usuario) VALUES (?)',
+      [nombre_usuario]
+    );
+    const idUsuario = usuarioResult.insertId;
 
-  return getById(result.insertId);
+    await conn.execute(
+      'INSERT INTO cliente (id_usuario_cli, correo) VALUES (?, ?)',
+      [idUsuario, correo ?? null]
+    );
+
+    await conn.commit();
+    return getById(idUsuario);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function update(id, data) {
