@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockTrabajadores } from '../../utils/mockData.js';
+import api from '../../services/api.js';
 import styles from './Trabajadores.module.css';
 
 const emptyForm = {
@@ -95,6 +96,12 @@ function Trabajadores() {
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+
+  useEffect(() => {
+    api.get('/trabajadores')
+      .then(({ data }) => setTrabajadores(data))
+      .catch(() => {});
+  }, []);
 
   const handleSave = (form) => {
     setTrabajadores([...trabajadores, {

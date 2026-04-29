@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, Textarea, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockPedidos, mockClientes, mockInventario } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Pedidos.module.css';
 
 const PRECIO_UNITARIO = {
@@ -33,7 +34,7 @@ const emptyForm = {
   valorTotal: 0,
 };
 
-function NuevoPedidoModal({ onClose, onSave }) {
+function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
   const [form, setForm] = useState(emptyForm);
 
   const handleChange = (e) => {
@@ -55,7 +56,7 @@ function NuevoPedidoModal({ onClose, onSave }) {
     onSave(form);
   };
 
-  const productoSeleccionado = mockInventario.find((p) => p.id === form.producto);
+  const productoSeleccionado = inventario.find((p) => p.id === form.producto);
 
   return (
     <Modal title='Nuevo Pedido' onClose={onClose} size='lg'>
@@ -64,7 +65,7 @@ function NuevoPedidoModal({ onClose, onSave }) {
           <FormField label='Cliente' required>
             <Select name='cliente' value={form.cliente} onChange={handleChange} required>
               <option value=''>Seleccionar cliente...</option>
-              {mockClientes.map((c) => (
+              {clientes.map((c) => (
                 <option key={c.id} value={c.nombre}>{c.nombre}</option>
               ))}
             </Select>
@@ -72,7 +73,7 @@ function NuevoPedidoModal({ onClose, onSave }) {
           <FormField label='Producto' required>
             <Select name='producto' value={form.producto} onChange={handleChange} required>
               <option value=''>Seleccionar producto...</option>
-              {mockInventario.map((p) => (
+              {inventario.map((p) => (
                 <option key={p.id} value={p.id}>{p.nombre}</option>
               ))}
             </Select>
@@ -136,13 +137,29 @@ function NuevoPedidoModal({ onClose, onSave }) {
 
 function Pedidos() {
   const [pedidos, setPedidos] = useState(mockPedidos);
+  const [clientes, setClientes] = useState(mockClientes);
+  const [inventario, setInventario] = useState(mockInventario);
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    api.get('/pedidos')
+      .then(({ data }) => setPedidos(data))
+      .catch(() => {});
+
+    api.get('/clientes')
+      .then(({ data }) => setClientes(data))
+      .catch(() => {});
+
+    api.get('/inventario')
+      .then(({ data }) => setInventario(data))
+      .catch(() => {});
+  }, []);
 
   const handleSave = (form) => {
     const newPedido = {
       id: `PED-00${pedidos.length + 1}`,
       cliente: form.cliente,
-      producto: mockInventario.find((p) => p.id === form.producto)?.nombre || form.producto,
+      producto: inventario.find((p) => p.id === form.producto)?.nombre || form.producto,
       cantidad: Number(form.cantidad),
       estado: form.estado,
       valorTotal: form.valorTotal,
@@ -204,7 +221,12 @@ function Pedidos() {
       </div>
 
       {showModal && (
-        <NuevoPedidoModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <NuevoPedidoModal
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          clientes={clientes}
+          inventario={inventario}
+        />
       )}
     </div>
   );

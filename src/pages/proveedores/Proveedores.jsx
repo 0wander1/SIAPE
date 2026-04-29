@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockProveedores, mockTrabajadores, mockInventario } from '../../utils/mockData.js';
 import { formatDate } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Proveedores.module.css';
 
 const emptyForm = {
   nombre: '', nit: '', trabajador: '', productos: [],
 };
 
-function ProveedorModal({ onClose, onSave }) {
+function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
   const [form, setForm] = useState(emptyForm);
   const [productoSel, setProductoSel] = useState('');
 
@@ -55,7 +56,7 @@ function ProveedorModal({ onClose, onSave }) {
               onChange={(e) => setForm({ ...form, trabajador: e.target.value })}
             >
               <option value=''>Seleccionar...</option>
-              {mockTrabajadores.map((t) => (
+              {trabajadores.map((t) => (
                 <option key={t.id} value={t.id}>{t.nombre}</option>
               ))}
             </Select>
@@ -71,7 +72,7 @@ function ProveedorModal({ onClose, onSave }) {
               style={{ flex: 1 }}
             >
               <option value=''>Seleccionar producto...</option>
-              {mockInventario.map((p) => (
+              {inventario.map((p) => (
                 <option key={p.id} value={p.nombre}>{p.nombre}</option>
               ))}
             </Select>
@@ -102,9 +103,25 @@ function ProveedorModal({ onClose, onSave }) {
 
 function Proveedores() {
   const [proveedores, setProveedores] = useState(mockProveedores);
+  const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
+  const [inventario, setInventario] = useState(mockInventario);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+
+  useEffect(() => {
+    api.get('/proveedores')
+      .then(({ data }) => setProveedores(data))
+      .catch(() => {});
+
+    api.get('/trabajadores')
+      .then(({ data }) => setTrabajadores(data))
+      .catch(() => {});
+
+    api.get('/inventario')
+      .then(({ data }) => setInventario(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = proveedores.filter(
     (p) =>
@@ -197,7 +214,12 @@ function Proveedores() {
       </div>
 
       {showModal && (
-        <ProveedorModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <ProveedorModal
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          trabajadores={trabajadores}
+          inventario={inventario}
+        />
       )}
     </div>
   );

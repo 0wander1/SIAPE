@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api.js';
 import styles from './Login.module.css';
 
 function Login() {
@@ -16,19 +17,29 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
-    await new Promise((r) => setTimeout(r, 800));
-
-    if (form.email === 'admin@siape.com' && form.password === '123456') {
-      localStorage.setItem('siape_token', 'mock-token-123');
-      localStorage.setItem(
-        'siape_user',
-        JSON.stringify({ name: 'Administrador', role: 'Administrador', email: form.email })
-      );
+    try {
+      const { data } = await api.post('/auth/login', {
+        email: form.email,
+        password: form.password,
+      });
+      localStorage.setItem('siape_token', data.token);
+      localStorage.setItem('siape_user', JSON.stringify(data.user));
       navigate('/dashboard');
-    } else {
-      setError('Correo o contraseña incorrectos.');
-      setLoading(false);
+    } catch {
+      // Fallback a credenciales mock
+      if (form.email === 'admin@siape.com' && form.password === '123456') {
+        localStorage.setItem('siape_token', 'mock-token-123');
+        localStorage.setItem(
+          'siape_user',
+          JSON.stringify({ name: 'Administrador', role: 'Administrador', email: form.email })
+        );
+        navigate('/dashboard');
+      } else {
+        setError('Correo o contraseña incorrectos.');
+        setLoading(false);
+      }
     }
   };
 

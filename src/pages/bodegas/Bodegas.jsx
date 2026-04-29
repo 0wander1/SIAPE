@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockBodegas, mockTrabajadores } from '../../utils/mockData.js';
+import api from '../../services/api.js';
 import styles from './Bodegas.module.css';
 
 const emptyForm = {
@@ -11,7 +12,7 @@ const emptyForm = {
   capacidadActual: '', tipo: 'Seca', estado: true, trabajador: '',
 };
 
-function BodegaModal({ onClose, onSave }) {
+function BodegaModal({ onClose, onSave, trabajadores }) {
   const [form, setForm] = useState(emptyForm);
 
   const handleChange = (e) => {
@@ -65,7 +66,7 @@ function BodegaModal({ onClose, onSave }) {
           <FormField label='Trabajador Responsable'>
             <Select name='trabajador' value={form.trabajador} onChange={handleChange}>
               <option value=''>Seleccionar...</option>
-              {mockTrabajadores.map((t) => (
+              {trabajadores.map((t) => (
                 <option key={t.id} value={t.id}>{t.nombre}</option>
               ))}
             </Select>
@@ -95,8 +96,19 @@ function BodegaModal({ onClose, onSave }) {
 
 function Bodegas() {
   const [bodegas, setBodegas] = useState(mockBodegas);
+  const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    api.get('/bodegas')
+      .then(({ data }) => setBodegas(data))
+      .catch(() => {});
+
+    api.get('/trabajadores')
+      .then(({ data }) => setTrabajadores(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = bodegas.filter(
     (b) =>
@@ -188,7 +200,11 @@ function Bodegas() {
       </div>
 
       {showModal && (
-        <BodegaModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <BodegaModal
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          trabajadores={trabajadores}
+        />
       )}
     </div>
   );

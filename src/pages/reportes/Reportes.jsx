@@ -4,15 +4,15 @@ import {
 } from 'recharts';
 import { mockPedidos, mockVentasSemana } from '../../utils/mockData.js';
 import { formatCOP } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Reportes.module.css';
 
-const totalPedidos = mockPedidos.filter((p) => p.estado !== 'Cancelado').length;
-const ingresosTotales = mockPedidos
+const mockTotalPedidos = mockPedidos.filter((p) => p.estado !== 'Cancelado').length;
+const mockIngresosTotales = mockPedidos
   .filter((p) => p.estado === 'Entregado')
   .reduce((s, p) => s + p.valorTotal, 0);
-const promedioPedido = totalPedidos > 0
-  ? Math.round(ingresosTotales / mockPedidos.filter((p) => p.estado === 'Entregado').length)
-  : 0;
+const mockEntregados = mockPedidos.filter((p) => p.estado === 'Entregado').length;
+const mockPromedioPedido = mockEntregados > 0 ? Math.round(mockIngresosTotales / mockEntregados) : 0;
 
 const formatYAxis = (value) => {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
@@ -36,10 +36,42 @@ function Reportes() {
   const [fechaInicio, setFechaInicio] = useState('2026-04-01');
   const [fechaFin, setFechaFin] = useState('2026-04-30');
   const [generated, setGenerated] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [reporteData, setReporteData] = useState({
+    totalPedidos: mockTotalPedidos,
+    ingresosTotales: mockIngresosTotales,
+    promedioPedido: mockPromedioPedido,
+    ventasSemana: mockVentasSemana,
+  });
 
-  const handleGenerar = (e) => {
+  const handleGenerar = async (e) => {
     e.preventDefault();
-    setGenerated(true);
+    setLoading(true);
+
+    try {
+      const [ventasRes] = await Promise.all([
+        api.get(`/reportes/ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`),
+        api.get('/reportes/inventario'),
+      ]);
+
+      const v = ventasRes.data;
+      setReporteData({
+        totalPedidos: v.totalPedidos ?? mockTotalPedidos,
+        ingresosTotales: v.ingresosTotales ?? mockIngresosTotales,
+        promedioPedido: v.promedioPedido ?? mockPromedioPedido,
+        ventasSemana: v.ventasPorSemana ?? v.ventasSemana ?? mockVentasSemana,
+      });
+    } catch {
+      setReporteData({
+        totalPedidos: mockTotalPedidos,
+        ingresosTotales: mockIngresosTotales,
+        promedioPedido: mockPromedioPedido,
+        ventasSemana: mockVentasSemana,
+      });
+    } finally {
+      setLoading(false);
+      setGenerated(true);
+    }
   };
 
   return (
@@ -71,8 +103,8 @@ function Reportes() {
               onChange={(e) => setFechaFin(e.target.value)}
             />
           </div>
-          <button type='submit' className={styles.btnGenerar}>
-            Generar Reporte
+          <button type='submit' className={styles.btnGenerar} disabled={loading}>
+            {loading ? 'Generando...' : 'Generar Reporte'}
           </button>
         </form>
 
@@ -81,17 +113,17 @@ function Reportes() {
             <div className={styles.metrics}>
               <div className={styles.metricCard}>
                 <p className={styles.metricLabel}>Total Pedidos</p>
-                <p className={styles.metricValue}>{totalPedidos}</p>
+                <p className={styles.metricValue}>{reporteData.totalPedidos}</p>
                 <p className={styles.metricSub}>Pedidos activos</p>
               </div>
               <div className={styles.metricCard}>
                 <p className={styles.metricLabel}>Ingresos Totales</p>
-                <p className={styles.metricValue}>{formatCOP(ingresosTotales)}</p>
+                <p className={styles.metricValue}>{formatCOP(reporteData.ingresosTotales)}</p>
                 <p className={styles.metricSub}>Pedidos entregados</p>
               </div>
               <div className={styles.metricCard}>
                 <p className={styles.metricLabel}>Promedio por Pedido</p>
-                <p className={styles.metricValue}>{formatCOP(promedioPedido)}</p>
+                <p className={styles.metricValue}>{formatCOP(reporteData.promedioPedido)}</p>
                 <p className={styles.metricSub}>Por pedido entregado</p>
               </div>
             </div>
@@ -101,7 +133,7 @@ function Reportes() {
               <div className={styles.chartWrap}>
                 <ResponsiveContainer width='100%' height={280}>
                   <BarChart
-                    data={mockVentasSemana}
+                    data={reporteData.ventasSemana}
                     margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray='3 3' stroke='#f1f5f9' />

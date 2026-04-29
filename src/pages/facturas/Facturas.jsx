@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockFacturas, mockPedidos, mockTrabajadores } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Facturas.module.css';
 
 const estadoClass = (estado) => {
@@ -17,20 +18,18 @@ const estadoClass = (estado) => {
   return map[estado] || styles.badgeDraft;
 };
 
-const emptyForm = {
-  numeroFactura: `F-2026-00${mockFacturas.length + 1}`,
-  idPedido: '',
-  fechaEmision: '',
-  fechaVencimiento: '',
-  subtotal: '',
-  impuesto: 19,
-  descuento: 0,
-  estado: 'Borrador',
-  trabajador: '',
-};
-
-function FacturaModal({ onClose, onSave }) {
-  const [form, setForm] = useState(emptyForm);
+function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
+  const [form, setForm] = useState({
+    numeroFactura: `F-2026-${String(nextNum).padStart(3, '0')}`,
+    idPedido: '',
+    fechaEmision: '',
+    fechaVencimiento: '',
+    subtotal: '',
+    impuesto: 19,
+    descuento: 0,
+    estado: 'Borrador',
+    trabajador: '',
+  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -57,7 +56,7 @@ function FacturaModal({ onClose, onSave }) {
           <FormField label='Pedido Asociado' required>
             <Select name='idPedido' value={form.idPedido} onChange={handleChange} required>
               <option value=''>Seleccionar pedido...</option>
-              {mockPedidos.map((p) => (
+              {pedidos.map((p) => (
                 <option key={p.id} value={p.id}>{p.id} — {p.cliente}</option>
               ))}
             </Select>
@@ -105,7 +104,7 @@ function FacturaModal({ onClose, onSave }) {
           <FormField label='Trabajador Responsable'>
             <Select name='trabajador' value={form.trabajador} onChange={handleChange}>
               <option value=''>Seleccionar...</option>
-              {mockTrabajadores.map((t) => (
+              {trabajadores.map((t) => (
                 <option key={t.id} value={t.id}>{t.nombre}</option>
               ))}
             </Select>
@@ -126,9 +125,25 @@ function FacturaModal({ onClose, onSave }) {
 
 function Facturas() {
   const [facturas, setFacturas] = useState(mockFacturas);
+  const [pedidos, setPedidos] = useState(mockPedidos);
+  const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    api.get('/facturas')
+      .then(({ data }) => setFacturas(data))
+      .catch(() => {});
+
+    api.get('/pedidos')
+      .then(({ data }) => setPedidos(data))
+      .catch(() => {});
+
+    api.get('/trabajadores')
+      .then(({ data }) => setTrabajadores(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = facturas.filter((f) => {
     const matchSearch = f.numeroFactura.toLowerCase().includes(search.toLowerCase()) ||
@@ -224,7 +239,13 @@ function Facturas() {
       </div>
 
       {showModal && (
-        <FacturaModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <FacturaModal
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          pedidos={pedidos}
+          trabajadores={trabajadores}
+          nextNum={facturas.length + 1}
+        />
       )}
     </div>
   );

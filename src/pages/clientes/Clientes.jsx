@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockClientes } from '../../utils/mockData.js';
+import api from '../../services/api.js';
 import styles from './Clientes.module.css';
 
 function ClienteModal({ onClose, onSave }) {
@@ -47,6 +48,12 @@ function Clientes() {
   const [clientes, setClientes] = useState(mockClientes);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    api.get('/clientes')
+      .then(({ data }) => setClientes(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = clientes.filter(
     (c) =>

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
 import { mockPagos, mockFacturas, mockTrabajadores } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Pagos.module.css';
 
 const metodoBadge = (metodo) => {
@@ -22,12 +23,12 @@ const emptyForm = {
   trabajador: '', referencia: '',
 };
 
-function PagoModal({ onClose, onSave }) {
+function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
   const [form, setForm] = useState(emptyForm);
 
-  const facturaSeleccionada = mockFacturas.find((f) => f.numeroFactura === form.idFactura);
+  const facturaSeleccionada = facturas.find((f) => f.numeroFactura === form.idFactura);
   const montoPendiente = facturaSeleccionada
-    ? facturaSeleccionada.total - mockPagos
+    ? facturaSeleccionada.total - pagos
         .filter((p) => p.idFactura === form.idFactura)
         .reduce((s, p) => s + p.monto, 0)
     : 0;
@@ -48,7 +49,7 @@ function PagoModal({ onClose, onSave }) {
               required
             >
               <option value=''>Seleccionar factura...</option>
-              {mockFacturas.map((f) => (
+              {facturas.map((f) => (
                 <option key={f.id} value={f.numeroFactura}>
                   {f.numeroFactura} — {formatCOP(f.total)}
                 </option>
@@ -93,7 +94,7 @@ function PagoModal({ onClose, onSave }) {
           <Select value={form.trabajador}
             onChange={(e) => setForm({ ...form, trabajador: e.target.value })}>
             <option value=''>Seleccionar...</option>
-            {mockTrabajadores.map((t) => (
+            {trabajadores.map((t) => (
               <option key={t.id} value={t.nombre}>{t.nombre}</option>
             ))}
           </Select>
@@ -110,10 +111,26 @@ function PagoModal({ onClose, onSave }) {
 
 function Pagos() {
   const [pagos, setPagos] = useState(mockPagos);
+  const [facturas, setFacturas] = useState(mockFacturas);
+  const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [search, setSearch] = useState('');
   const [filtroMetodo, setFiltroMetodo] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+
+  useEffect(() => {
+    api.get('/pagos')
+      .then(({ data }) => setPagos(data))
+      .catch(() => {});
+
+    api.get('/facturas')
+      .then(({ data }) => setFacturas(data))
+      .catch(() => {});
+
+    api.get('/trabajadores')
+      .then(({ data }) => setTrabajadores(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = pagos.filter((p) => {
     const matchSearch =
@@ -219,7 +236,13 @@ function Pagos() {
       </div>
 
       {showModal && (
-        <PagoModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <PagoModal
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          facturas={facturas}
+          trabajadores={trabajadores}
+          pagos={pagos}
+        />
       )}
     </div>
   );

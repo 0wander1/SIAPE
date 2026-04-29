@@ -1,12 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { mockInventario } from '../../utils/mockData.js';
 import { formatDate } from '../../utils/format.js';
+import api from '../../services/api.js';
 import styles from './Inventario.module.css';
 
 function Inventario() {
   const [search, setSearch] = useState('');
   const [items, setItems] = useState(mockInventario);
   const [menuOpen, setMenuOpen] = useState(null);
+
+  useEffect(() => {
+    api.get('/inventario')
+      .then(({ data }) => setItems(data))
+      .catch(() => {});
+  }, []);
 
   const filtered = items.filter(
     (item) =>
