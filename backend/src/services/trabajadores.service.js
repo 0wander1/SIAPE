@@ -27,22 +27,31 @@ async function create(data) {
   const salt = await bcrypt.genSalt(10);
   const password_hash = await bcrypt.hash(password, salt);
 
-  const [result] = await pool.query(
-    `INSERT INTO usuario_trab
-      (cargo, direccion, turno, celular, user_name, password_hash, salt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      cargo,
-      direccion ?? null,
-      turno ?? null,
-      celular ?? null,
-      user_name,
-      password_hash,
-      salt,
-    ]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  return getById(result.insertId);
+    const [usuarioResult] = await conn.execute(
+      'INSERT INTO usuario (nombre_usuario) VALUES (?)',
+      [user_name]
+    );
+    const idUsuario = usuarioResult.insertId;
+
+    await conn.execute(
+      `INSERT INTO usuario_trab
+        (id_usuario_trab, cargo, direccion, turno, celular, user_name, password_hash, salt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [idUsuario, cargo, direccion ?? null, turno ?? null, celular ?? null, user_name, password_hash, salt]
+    );
+
+    await conn.commit();
+    return getById(idUsuario);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function update(id, data) {
