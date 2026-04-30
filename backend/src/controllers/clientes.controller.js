@@ -23,6 +23,7 @@ async function getById(req, res, next) {
 
 async function create(req, res, next) {
   try {
+    console.log(req.body);
     const { nombre_usuario, correo } = req.body;
 
     if (!nombre_usuario || !correo) {

@@ -8,7 +8,7 @@ import api from '../../services/api.js';
 import styles from './Clientes.module.css';
 
 function ClienteModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ nombre: '', correo: '' });
+  const [form, setForm] = useState({ nombre_usuario: '', correo: '' });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -20,8 +20,8 @@ function ClienteModal({ onClose, onSave }) {
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormField label='Nombre de Usuario' required>
           <Input
-            value={form.nombre}
-            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            value={form.nombre_usuario}
+            onChange={(e) => setForm({ ...form, nombre_usuario: e.target.value })}
             placeholder='Nombre completo o razón social'
             required
           />
@@ -57,13 +57,13 @@ function Clientes() {
 
   const filtered = clientes.filter(
     (c) =>
-      (c.nombre ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.nombre_usuario ?? '').toLowerCase().includes(search.toLowerCase()) ||
       (c.correo ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleSave = async (form) => {
     try {
-      await api.post('/clientes', { nombre_usuario: form.nombre, correo: form.correo });
+      await api.post('/clientes', { nombre_usuario: form.nombre_usuario, correo: form.correo });
       const { data } = await api.get('/clientes');
       setClientes(data);
     } catch {
@@ -102,7 +102,7 @@ function Clientes() {
             {filtered.map((c) => (
               <tr key={c.id}>
                 <td className={styles.mono}>{c.id}</td>
-                <td className={styles.nombre}>{c.nombre}</td>
+                <td className={styles.nombre}>{c.nombre_usuario}</td>
                 <td className={styles.correo}>{c.correo}</td>
               </tr>
             ))}
