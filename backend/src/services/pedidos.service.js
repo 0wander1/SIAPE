@@ -14,14 +14,32 @@ const CAMPOS_PERMITIDOS_UPDATE = [
   'tiempo_id_tiempo',
 ];
 
+const SQL_SELECT = `
+  SELECT
+    pe.id_pedido          AS id,
+    u.nombre_usuario      AS cliente,
+    p.nombre_producto     AS producto,
+    pe.cantidad,
+    pe.estado,
+    pe.valor_total        AS valorTotal,
+    pe.direccion_pedido   AS direccion,
+    pe.fecha_entrega_estimada AS fechaEstimada,
+    pe.fecha_entrega_real     AS fechaReal,
+    pe.observaciones
+  FROM pedido_externo pe
+  LEFT JOIN cliente    c ON pe.cliente_id_usuario_cli = c.id_usuario_cli
+  LEFT JOIN usuario    u ON c.id_usuario_cli           = u.id_usuario
+  LEFT JOIN producto   p ON pe.producto_id_producto    = p.id_producto
+`;
+
 async function getAll() {
-  const [rows] = await pool.query('SELECT * FROM pedido_externo ORDER BY id_pedido DESC');
+  const [rows] = await pool.query(`${SQL_SELECT} ORDER BY pe.id_pedido DESC`);
   return rows;
 }
 
 async function getById(id) {
   const [rows] = await pool.query(
-    'SELECT * FROM pedido_externo WHERE id_pedido = ?',
+    `${SQL_SELECT} WHERE pe.id_pedido = ?`,
     [id]
   );
   return rows[0] || null;

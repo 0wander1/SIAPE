@@ -10,6 +10,7 @@ import Bodegas from './pages/bodegas/Bodegas.jsx';
 import Trabajadores from './pages/trabajadores/Trabajadores.jsx';
 import Facturas from './pages/facturas/Facturas.jsx';
 import Pagos from './pages/pagos/Pagos.jsx';
+import Productos from './pages/productos/Productos.jsx';
 import Reportes from './pages/reportes/Reportes.jsx';
 
 const isAuthenticated = () => {
@@ -37,6 +38,7 @@ function App() {
           <Route path='dashboard' element={<Dashboard />} />
           <Route path='pedidos' element={<Pedidos />} />
           <Route path='inventario' element={<Inventario />} />
+          <Route path='productos' element={<Productos />} />
           <Route path='proveedores' element={<Proveedores />} />
           <Route path='clientes' element={<Clientes />} />
           <Route path='bodegas' element={<Bodegas />} />

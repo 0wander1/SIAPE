@@ -5,6 +5,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '▦' },
   { path: '/pedidos', label: 'Pedidos', icon: '📦' },
   { path: '/inventario', label: 'Inventario', icon: '🗃' },
+  { path: '/productos', label: 'Productos', icon: '🛒' },
   { path: '/proveedores', label: 'Proveedores', icon: '🏭' },
   { path: '/clientes', label: 'Clientes', icon: '👥' },
   { path: '/bodegas', label: 'Bodegas', icon: '🏠' },

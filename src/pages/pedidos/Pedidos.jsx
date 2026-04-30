@@ -3,7 +3,7 @@ import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, Textarea, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
-import { mockPedidos, mockClientes, mockInventario } from '../../utils/mockData.js';
+import { mockPedidos, mockClientes, mockInventario as mockProductos } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Pedidos.module.css';
@@ -34,7 +34,7 @@ const emptyForm = {
   valorTotal: 0,
 };
 
-function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
+function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
   const [form, setForm] = useState(emptyForm);
 
   const handleChange = (e) => {
@@ -56,8 +56,6 @@ function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
     onSave(form);
   };
 
-  const productoSeleccionado = inventario.find((p) => p.id === form.producto);
-
   return (
     <Modal title='Nuevo Pedido' onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -75,8 +73,10 @@ function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
           <FormField label='Producto' required>
             <Select name='producto' value={form.producto} onChange={handleChange} required>
               <option value=''>Seleccionar producto...</option>
-              {inventario.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
+              {productos.map((p) => (
+                <option key={p.id_producto ?? p.id} value={p.id_producto ?? p.id}>
+                  {p.nombre_producto ?? p.nombre}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -114,13 +114,6 @@ function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
           </FormField>
         </FormRow>
 
-        {productoSeleccionado && (
-          <div className={styles.stockInfo}>
-            Stock disponible: <strong>{productoSeleccionado.cantidadDisponible} uds</strong> —
-            Proveedor: <strong>{productoSeleccionado.proveedor}</strong>
-          </div>
-        )}
-
         <FormField label='Observaciones'>
           <Textarea
             name='observaciones' value={form.observaciones} onChange={handleChange}
@@ -140,7 +133,7 @@ function NuevoPedidoModal({ onClose, onSave, clientes, inventario }) {
 function Pedidos() {
   const [pedidos, setPedidos] = useState(mockPedidos);
   const [clientes, setClientes] = useState(mockClientes);
-  const [inventario, setInventario] = useState(mockInventario);
+  const [productos, setProductos] = useState(mockProductos);
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
@@ -152,8 +145,8 @@ function Pedidos() {
       .then(({ data }) => setClientes(data))
       .catch(() => {});
 
-    api.get('/inventario')
-      .then(({ data }) => setInventario(data))
+    api.get('/productos')
+      .then(({ data }) => setProductos(data))
       .catch(() => {});
   }, []);
 
@@ -177,7 +170,7 @@ function Pedidos() {
       )?.nombre ?? clientes.find(
         (c) => (c.id ?? c.id_usuario_cli) == form.cliente
       )?.nombre_usuario ?? form.cliente;
-      const nombreProducto = inventario.find((p) => p.id === form.producto)?.nombre || form.producto;
+      const nombreProducto = productos.find((p) => String(p.id_producto ?? p.id) === String(form.producto))?.nombre_producto ?? productos.find((p) => String(p.id_producto ?? p.id) === String(form.producto))?.nombre ?? form.producto;
       setPedidos((prev) => [{
         id: `PED-00${prev.length + 1}`,
         cliente: nombreCliente,
@@ -247,7 +240,7 @@ function Pedidos() {
           onClose={() => setShowModal(false)}
           onSave={handleSave}
           clientes={clientes}
-          inventario={inventario}
+          productos={productos}
         />
       )}
     </div>
