@@ -70,6 +70,14 @@ async function getById(id) {
 async function create(data) {
   const { nombre_proveedor, NIT, id_usuario_trab } = data;
 
+  const [existing] = await pool.query(
+    'SELECT id_proveedor FROM proveedor WHERE NIT = ?',
+    [NIT]
+  );
+  if (existing.length > 0) {
+    throw Object.assign(new Error('Ya existe un proveedor con ese NIT.'), { status: 409 });
+  }
+
   const [result] = await pool.query(
     'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
     [nombre_proveedor, NIT, id_usuario_trab]

@@ -12,8 +12,8 @@ const emptyForm = {
   nombre: '', nit: '', trabajador: '', productos: [],
 };
 
-function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
-  const [form, setForm] = useState(emptyForm);
+function ProveedorModal({ onClose, onSave, trabajadores, inventario, nitError, initialData, isEdit }) {
+  const [form, setForm] = useState(initialData ?? emptyForm);
   const [productoSel, setProductoSel] = useState('');
 
   const addProducto = () => {
@@ -32,8 +32,13 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
   };
 
   return (
-    <Modal title='Agregar Proveedor' onClose={onClose} size='md'>
+    <Modal title={isEdit ? 'Editar Proveedor' : 'Agregar Proveedor'} onClose={onClose} size='md'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {nitError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '8px 12px', fontSize: 14 }}>
+            {nitError}
+          </div>
+        )}
         <FormField label='Nombre del Proveedor' required>
           <Input
             name='nombre' value={form.nombre}
@@ -75,7 +80,9 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
             >
               <option value=''>Seleccionar producto...</option>
               {inventario.map((p) => (
-                <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                <option key={p.id_producto ?? p.id} value={p.nombre_producto ?? p.nombre}>
+                  {p.nombre_producto ?? p.nombre}
+                </option>
               ))}
             </Select>
             <button type='button' className={styles.btnAddProd} onClick={addProducto}>
@@ -96,7 +103,7 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Guardar Proveedor</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Actualizar Proveedor' : 'Guardar Proveedor'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -104,53 +111,85 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario }) {
 }
 
 function Proveedores() {
-  const [proveedores, setProveedores] = useState(mockProveedores);
+  const [proveedores, setProveedores] = useState([]);
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [inventario, setInventario] = useState(mockInventario);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+  const [nitError, setNitError] = useState('');
+  const [editando, setEditando] = useState(null);
+  const [initialData, setInitialData] = useState(null);
 
   useEffect(() => {
     api.get('/proveedores')
-      .then(({ data }) => setProveedores(data))
+      .then(({ data }) => { console.log('[Proveedores] GET /proveedores:', data); setProveedores(data); })
       .catch(() => {});
 
     api.get('/trabajadores')
       .then(({ data }) => setTrabajadores(data))
       .catch(() => {});
 
-    api.get('/inventario')
+    api.get('/productos')
       .then(({ data }) => setInventario(data))
       .catch(() => {});
   }, []);
 
   const filtered = proveedores.filter(
     (p) =>
-      p.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      p.nit.includes(search)
+      (p.nombre_proveedor ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.NIT ?? '').includes(search)
   );
 
+  const openEdit = (p) => {
+    setInitialData({
+      nombre:    p.nombre_proveedor,
+      nit:       p.NIT,
+      trabajador: String(p.id_usuario_trab ?? ''),
+      productos: (p.productos_asociados ?? []).map((pa) => {
+        const prod = inventario.find((i) => (i.id_producto ?? i.id) == pa.producto_id_producto);
+        return prod ? (prod.nombre_producto ?? prod.nombre) : String(pa.producto_id_producto);
+      }),
+    });
+    setEditando(p.id_proveedor);
+    setNitError('');
+    setMenuOpen(null);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
+    setNitError('');
+  };
+
   const handleSave = async (form) => {
+    setNitError('');
     try {
-      await api.post('/proveedores', {
-        nombre_proveedor: form.nombre,
-        NIT:              form.nit,
-        id_usuario_trab:  Number(form.trabajador) || null,
-      });
+      if (editando) {
+        await api.put(`/proveedores/${editando}`, {
+          nombre_proveedor: form.nombre,
+          NIT:              form.nit,
+          id_usuario_trab:  Number(form.trabajador) || null,
+        });
+      } else {
+        await api.post('/proveedores', {
+          nombre_proveedor: form.nombre,
+          NIT:              form.nit,
+          id_usuario_trab:  Number(form.trabajador) || null,
+        });
+      }
       const { data } = await api.get('/proveedores');
       setProveedores(data);
-    } catch {
-      setProveedores((prev) => [...prev, {
-        id: Date.now(),
-        nombre: form.nombre,
-        nit: form.nit,
-        pedidosPorEntregar: 0,
-        fechaPedidoPendiente: null,
-        idUsuario: Number(form.trabajador) || null,
-      }]);
+      closeModal();
+    } catch (error) {
+      if (error.response?.status === 409) {
+        setNitError('Ya existe un proveedor con ese NIT.');
+      } else {
+        closeModal();
+      }
     }
-    setShowModal(false);
   };
 
   return (
@@ -185,29 +224,35 @@ function Proveedores() {
           </thead>
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.id}>
-                <td className={styles.mono}>{p.id}</td>
-                <td className={styles.nombre}>{p.nombre}</td>
-                <td className={styles.mono}>{p.nit}</td>
+              <tr key={p.id_proveedor}>
+                <td className={styles.mono}>{p.id_proveedor}</td>
+                <td className={styles.nombre}>{p.nombre_proveedor}</td>
+                <td className={styles.mono}>{p.NIT}</td>
                 <td>
-                  <span className={p.pedidosPorEntregar > 0 ? styles.badgeBlue : styles.badgeGray}>
-                    {p.pedidosPorEntregar}
+                  <span className={(p.productos_asociados?.length ?? 0) > 0 ? styles.badgeBlue : styles.badgeGray}>
+                    {p.productos_asociados?.length ?? 0}
                   </span>
                 </td>
-                <td>{formatDate(p.fechaPedidoPendiente)}</td>
-                <td>{p.idUsuario}</td>
+                <td>-</td>
+                <td>{p.id_usuario_trab ?? '-'}</td>
                 <td className={styles.menuCell}>
                   <div className={styles.menuWrap}>
                     <button
                       className={styles.menuBtn}
-                      onClick={() => setMenuOpen(menuOpen === p.id ? null : p.id)}
+                      onClick={() => setMenuOpen(menuOpen === p.id_proveedor ? null : p.id_proveedor)}
                     >⋮</button>
-                    {menuOpen === p.id && (
+                    {menuOpen === p.id_proveedor && (
                       <div className={styles.dropdown}>
-                        <button onClick={() => setMenuOpen(null)}>✏️ Editar</button>
-                        <button className={styles.dangerItem} onClick={() => {
-                          setProveedores(proveedores.filter((x) => x.id !== p.id));
+                        <button onClick={() => openEdit(p)}>✏️ Editar</button>
+                        <button className={styles.dangerItem} onClick={async () => {
+                          if (!window.confirm(`¿Eliminar el proveedor "${p.nombre_proveedor}"? Esta acción no se puede deshacer.`)) return;
                           setMenuOpen(null);
+                          try {
+                            await api.delete(`/proveedores/${p.id_proveedor}`);
+                            setProveedores((prev) => prev.filter((x) => x.id_proveedor !== p.id_proveedor));
+                          } catch {
+                            window.alert('No se pudo eliminar el proveedor. Intenta de nuevo.');
+                          }
                         }}>🗑️ Eliminar</button>
                       </div>
                     )}
@@ -224,10 +269,13 @@ function Proveedores() {
 
       {showModal && (
         <ProveedorModal
-          onClose={() => setShowModal(false)}
+          onClose={closeModal}
           onSave={handleSave}
           trabajadores={trabajadores}
           inventario={inventario}
+          nitError={nitError}
+          initialData={initialData}
+          isEdit={!!editando}
         />
       )}
     </div>
