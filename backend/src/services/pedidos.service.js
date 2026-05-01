@@ -57,31 +57,50 @@ async function create(data) {
     fecha_entrega_real,
     observaciones,
     usuario_trab_id,
-    tiempo_id_tiempo,
   } = data;
 
-  const [result] = await pool.query(
-    `INSERT INTO pedido_externo
-      (cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total,
-       direccion_pedido, fecha_entrega_estimada, fecha_entrega_real, observaciones,
-       usuario_trab_id, tiempo_id_tiempo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      cliente_id_usuario_cli,
-      producto_id_producto,
-      cantidad,
-      estado,
-      valor_total,
-      direccion_pedido,
-      fecha_entrega_estimada ?? null,
-      fecha_entrega_real ?? null,
-      observaciones ?? null,
-      usuario_trab_id,
-      tiempo_id_tiempo ?? null,
-    ]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  return getById(result.insertId);
+    const [tiempoResult] = await conn.query(
+      `INSERT INTO tiempo
+        (fecha_hora, anio, mes, semana, trimestre, dia_semana, es_fin_semana, es_festivo, dia)
+       VALUES (NOW(), YEAR(NOW()), MONTH(NOW()), WEEK(NOW()), QUARTER(NOW()),
+               DAYNAME(NOW()), DAYOFWEEK(NOW()) IN (1,7), 0, DAY(NOW()))`
+    );
+
+    const tiempo_id_tiempo = tiempoResult.insertId;
+
+    const [pedidoResult] = await conn.query(
+      `INSERT INTO pedido_externo
+        (cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total,
+         direccion_pedido, fecha_entrega_estimada, fecha_entrega_real, observaciones,
+         usuario_trab_id, tiempo_id_tiempo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        cliente_id_usuario_cli,
+        producto_id_producto,
+        cantidad,
+        estado,
+        valor_total,
+        direccion_pedido,
+        fecha_entrega_estimada ?? null,
+        fecha_entrega_real ?? null,
+        observaciones ?? null,
+        usuario_trab_id,
+        tiempo_id_tiempo,
+      ]
+    );
+
+    await conn.commit();
+    return getById(pedidoResult.insertId);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 async function update(id, data) {

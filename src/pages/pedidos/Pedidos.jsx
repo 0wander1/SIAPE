@@ -137,14 +137,17 @@ function Pedidos() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
+    console.log('[Pedidos] GET /pedidos');
     api.get('/pedidos')
       .then(({ data }) => setPedidos(data))
       .catch(() => {});
 
+    console.log('[Pedidos] GET /clientes');
     api.get('/clientes')
       .then(({ data }) => setClientes(data))
       .catch(() => {});
 
+    console.log('[Pedidos] GET /productos');
     api.get('/productos')
       .then(({ data }) => setProductos(data))
       .catch(() => {});
@@ -152,6 +155,8 @@ function Pedidos() {
 
   const handleSave = async (form) => {
     try {
+      const user = JSON.parse(localStorage.getItem('siape_user'));
+      console.log('[Pedidos] POST /pedidos', form);
       await api.post('/pedidos', {
         cliente_id_usuario_cli:  Number(form.cliente),
         producto_id_producto:    form.producto,
@@ -161,7 +166,9 @@ function Pedidos() {
         direccion_pedido:        form.direccion,
         fecha_entrega_estimada:  form.fechaEstimada || null,
         observaciones:           form.observaciones || null,
+        usuario_trab_id:         user?.id,
       });
+      console.log('[Pedidos] GET /pedidos (refresh)');
       const { data } = await api.get('/pedidos');
       setPedidos(data);
     } catch {

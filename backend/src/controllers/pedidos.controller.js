@@ -23,9 +23,10 @@ async function getById(req, res, next) {
 
 async function create(req, res, next) {
   try {
+    console.log('[pedidos.controller] create req.body:', req.body);
     const { cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido, usuario_trab_id } = req.body;
 
-    if (!cliente_id_usuario_cli || !producto_id_producto || !cantidad || !estado || !valor_total || !direccion_pedido || !usuario_trab_id) {
+    if (!cliente_id_usuario_cli || !producto_id_producto || !cantidad || !estado || valor_total === undefined || valor_total === null || !direccion_pedido || !usuario_trab_id) {
       return res.status(400).json({
         message: 'Faltan campos requeridos: cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido, usuario_trab_id.',
       });
