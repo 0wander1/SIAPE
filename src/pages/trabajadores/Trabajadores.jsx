@@ -12,8 +12,8 @@ const emptyForm = {
   celular: '', username: '', password: '', confirmPassword: '',
 };
 
-function TrabajadorModal({ onClose, onSave }) {
-  const [form, setForm] = useState(emptyForm);
+function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
+  const [form, setForm] = useState(initialData ?? emptyForm);
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
@@ -23,15 +23,21 @@ function TrabajadorModal({ onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (form.password !== form.confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
+    if (!isEdit || form.password) {
+      if (form.password !== form.confirmPassword) {
+        setError('Las contraseñas no coinciden.');
+        return;
+      }
+      if (!isEdit && !form.password) {
+        setError('La contraseña es requerida.');
+        return;
+      }
     }
     onSave(form);
   };
 
   return (
-    <Modal title='Agregar Trabajador' onClose={onClose} size='lg'>
+    <Modal title={isEdit ? 'Editar Trabajador' : 'Agregar Trabajador'} onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormRow>
           <FormField label='Nombre Completo' required>
@@ -71,13 +77,14 @@ function TrabajadorModal({ onClose, onSave }) {
         </FormRow>
 
         <FormRow>
-          <FormField label='Contraseña' required>
+          <FormField label={isEdit ? 'Nueva Contraseña' : 'Contraseña'} required={!isEdit}>
             <Input type='password' name='password' value={form.password}
-              onChange={handleChange} placeholder='••••••••' required />
+              onChange={handleChange} placeholder={isEdit ? 'Dejar vacío para no cambiar' : '••••••••'}
+              required={!isEdit} />
           </FormField>
-          <FormField label='Confirmar Contraseña' required>
+          <FormField label='Confirmar Contraseña' required={!isEdit}>
             <Input type='password' name='confirmPassword' value={form.confirmPassword}
-              onChange={handleChange} placeholder='••••••••' required />
+              onChange={handleChange} placeholder='••••••••' required={!isEdit} />
           </FormField>
         </FormRow>
 
@@ -85,7 +92,7 @@ function TrabajadorModal({ onClose, onSave }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Guardar Trabajador</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Actualizar Trabajador' : 'Guardar Trabajador'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -96,6 +103,8 @@ function Trabajadores() {
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [initialData, setInitialData] = useState(null);
 
   useEffect(() => {
     api.get('/trabajadores')
@@ -103,44 +112,65 @@ function Trabajadores() {
       .catch(() => {});
   }, []);
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
+  };
+
+  const openEdit = (t) => {
+    setInitialData({
+      nombre:          t.nombre ?? '',
+      cargo:           t.cargo ?? '',
+      direccion:       t.direccion ?? '',
+      turno:           t.turno ?? 'Mañana',
+      celular:         t.celular ?? '',
+      username:        t.user_name ?? '',
+      password:        '',
+      confirmPassword: '',
+    });
+    setEditando(t.id_usuario_trab);
+    setMenuOpen(null);
+    setShowModal(true);
+  };
+
   const handleSave = async (form) => {
+    const base = {
+      cargo:     form.cargo,
+      direccion: form.direccion || null,
+      turno:     form.turno    || null,
+      celular:   form.celular  || null,
+      user_name: form.username,
+    };
     try {
-      await api.post('/trabajadores', {
-        cargo:     form.cargo,
-        direccion: form.direccion || null,
-        turno:     form.turno    || null,
-        celular:   form.celular  || null,
-        user_name: form.username,
-        password:  form.password,
-      });
+      if (editando) {
+        await api.put(`/trabajadores/${editando}`, {
+          ...base,
+          ...(form.password ? { password: form.password } : {}),
+        });
+      } else {
+        await api.post('/trabajadores', { ...base, password: form.password });
+      }
       const { data } = await api.get('/trabajadores');
       setTrabajadores(data);
+      closeModal();
     } catch {
-      setTrabajadores((prev) => [...prev, {
-        id: Date.now(),
-        nombre:   form.nombre,
-        cargo:    form.cargo,
-        direccion: form.direccion,
-        turno:    form.turno,
-        celular:  form.celular,
-        user_name: form.username,
-      }]);
+      closeModal();
     }
-    setShowModal(false);
   };
 
   return (
     <div className={styles.page}>
       <div className={styles.topBar}>
         <h2 className={styles.heading}>Equipo de Trabajo</h2>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+        <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
           + Agregar Trabajador
         </button>
       </div>
 
       <div className={styles.grid}>
         {trabajadores.map((t) => (
-          <div key={t.id} className={styles.card}>
+          <div key={t.id_usuario_trab ?? t.user_name ?? Math.random()} className={styles.card}>
             <div className={styles.cardHeader}>
               <div className={styles.avatar}>
                 {(t.nombre || t.user_name || '?').charAt(0).toUpperCase()}
@@ -148,14 +178,20 @@ function Trabajadores() {
               <div className={styles.menuWrap}>
                 <button
                   className={styles.menuBtn}
-                  onClick={() => setMenuOpen(menuOpen === t.id ? null : t.id)}
+                  onClick={() => setMenuOpen(menuOpen === t.id_usuario_trab ? null : t.id_usuario_trab)}
                 >⋮</button>
-                {menuOpen === t.id && (
+                {menuOpen === t.id_usuario_trab && (
                   <div className={styles.dropdown}>
-                    <button onClick={() => setMenuOpen(null)}>✏️ Editar</button>
-                    <button className={styles.dangerItem} onClick={() => {
-                      setTrabajadores(trabajadores.filter((x) => x.id !== t.id));
+                    <button onClick={() => openEdit(t)}>✏️ Editar</button>
+                    <button className={styles.dangerItem} onClick={async () => {
+                      if (!window.confirm(`¿Eliminar a "${t.nombre || t.user_name}"? Esta acción no se puede deshacer.`)) return;
                       setMenuOpen(null);
+                      try {
+                        await api.delete(`/trabajadores/${t.id_usuario_trab}`);
+                        setTrabajadores((prev) => prev.filter((x) => x.id_usuario_trab !== t.id_usuario_trab));
+                      } catch {
+                        window.alert('No se pudo eliminar el trabajador. Intenta de nuevo.');
+                      }
                     }}>🗑️ Eliminar</button>
                   </div>
                 )}
@@ -172,7 +208,12 @@ function Trabajadores() {
       </div>
 
       {showModal && (
-        <TrabajadorModal onClose={() => setShowModal(false)} onSave={handleSave} />
+        <TrabajadorModal
+          onClose={closeModal}
+          onSave={handleSave}
+          initialData={initialData}
+          isEdit={!!editando}
+        />
       )}
     </div>
   );
