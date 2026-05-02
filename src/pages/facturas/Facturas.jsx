@@ -61,9 +61,9 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
             <Input name='numeroFactura' value={form.numeroFactura}
               onChange={handleChange} placeholder='F-2026-001' required />
           </FormField>
-          <FormField label='Pedido Asociado' required>
-            <Select name='idPedido' value={form.idPedido} onChange={handleChange} required>
-              <option value=''>Seleccionar pedido...</option>
+          <FormField label='Pedido Asociado'>
+            <Select name='idPedido' value={form.idPedido} onChange={handleChange}>
+              <option value=''>Sin pedido asociado</option>
               {pedidos.map((p) => (
                 <option key={p.id_pedido ?? p.id} value={p.id_pedido ?? p.id}>
                   {p.id_pedido ?? p.id} — {p.cliente ?? p.nombre_cliente}
@@ -208,7 +208,7 @@ function Facturas() {
       descuento:         Number(form.descuento) || 0,
       estado:            form.estado,
       usuario_trab_id:   usuarioTrabId,
-      pedido_id_pedido:  form.idPedido,
+      pedido_id_pedido:  form.idPedido ? Number(form.idPedido) : null,
     };
     setPedidoError('');
     try {

@@ -24,11 +24,11 @@ async function getById(req, res, next) {
 async function create(req, res, next) {
   try {
     console.log(req.body);
-    const { numero_factura, fecha_emision, subtotal, estado, usuario_trab_id, pedido_id_pedido } = req.body;
+    const { numero_factura, fecha_emision, subtotal, estado, usuario_trab_id } = req.body;
 
-    if (!numero_factura || !fecha_emision || subtotal === undefined || !estado || !usuario_trab_id || !pedido_id_pedido) {
+    if (!numero_factura || !fecha_emision || subtotal === undefined || !estado || !usuario_trab_id) {
       return res.status(400).json({
-        message: 'Faltan campos requeridos: numero_factura, fecha_emision, subtotal, estado, usuario_trab_id, pedido_id_pedido.',
+        message: 'Faltan campos requeridos: numero_factura, fecha_emision, subtotal, estado, usuario_trab_id.',
       });
     }
 
