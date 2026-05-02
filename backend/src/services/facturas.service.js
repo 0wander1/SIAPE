@@ -47,6 +47,17 @@ async function create(data) {
     pedido_id_pedido,
   } = data;
 
+  const [existing] = await pool.query(
+    'SELECT id_factura FROM factura WHERE pedido_id_pedido = ?',
+    [pedido_id_pedido]
+  );
+  if (existing.length > 0) {
+    throw Object.assign(
+      new Error('Ya existe una factura para ese pedido'),
+      { status: 409 }
+    );
+  }
+
   const total = calcularTotal(subtotal, impuesto ?? 0, descuento ?? 0);
 
   const [result] = await pool.query(

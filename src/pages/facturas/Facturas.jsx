@@ -10,16 +10,17 @@ import styles from './Facturas.module.css';
 
 const estadoClass = (estado) => {
   const map = {
-    'Pagada': styles.badgePaid,
-    'Pendiente': styles.badgePending,
-    'Borrador': styles.badgeDraft,
-    'Vencida': styles.badgeOverdue,
+    'emitida':  styles.badgePending,
+    'pagada':   styles.badgePaid,
+    'vencida':  styles.badgeOverdue,
+    'anulada':  styles.badgeDraft,
+    'parcial':  styles.badgeDraft,
   };
   return map[estado] || styles.badgeDraft;
 };
 
-function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
-  const [form, setForm] = useState({
+function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initialData, pedidoError }) {
+  const [form, setForm] = useState(initialData ?? {
     numeroFactura: `F-2026-${String(nextNum).padStart(3, '0')}`,
     idPedido: '',
     fechaEmision: '',
@@ -27,7 +28,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
     subtotal: '',
     impuesto: 19,
     descuento: 0,
-    estado: 'Borrador',
+    estado: 'emitida',
     trabajador: '',
   });
 
@@ -45,9 +46,16 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
     onSave({ ...form, impuesto: impuestoAmt, total });
   };
 
+  const isEdit = !!initialData;
+
   return (
-    <Modal title='Generar Nueva Factura' onClose={onClose} size='lg'>
+    <Modal title={isEdit ? 'Editar Factura' : 'Generar Nueva Factura'} onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pedidoError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '8px 12px', fontSize: 14 }}>
+            {pedidoError}
+          </div>
+        )}
         <FormRow>
           <FormField label='Número de Factura' required>
             <Input name='numeroFactura' value={form.numeroFactura}
@@ -57,7 +65,9 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
             <Select name='idPedido' value={form.idPedido} onChange={handleChange} required>
               <option value=''>Seleccionar pedido...</option>
               {pedidos.map((p) => (
-                <option key={p.id} value={p.id}>{p.id} — {p.cliente}</option>
+                <option key={p.id_pedido ?? p.id} value={p.id_pedido ?? p.id}>
+                  {p.id_pedido ?? p.id} — {p.cliente ?? p.nombre_cliente}
+                </option>
               ))}
             </Select>
           </FormField>
@@ -92,10 +102,11 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
           </FormField>
           <FormField label='Estado'>
             <Select name='estado' value={form.estado} onChange={handleChange}>
-              <option value='Borrador'>Borrador</option>
-              <option value='Pendiente'>Pendiente</option>
-              <option value='Pagada'>Pagada</option>
-              <option value='Vencida'>Vencida</option>
+              <option value='emitida'>Emitida</option>
+              <option value='pagada'>Pagada</option>
+              <option value='vencida'>Vencida</option>
+              <option value='anulada'>Anulada</option>
+              <option value='parcial'>Parcial</option>
             </Select>
           </FormField>
         </FormRow>
@@ -118,7 +129,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Generar Factura</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Guardar Cambios' : 'Generar Factura'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -132,6 +143,10 @@ function Facturas() {
   const [search, setSearch] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [initialData, setInitialData] = useState(null);
+  const [pedidoError, setPedidoError] = useState('');
 
   useEffect(() => {
     api.get('/facturas')
@@ -147,43 +162,72 @@ function Facturas() {
       .catch(() => {});
   }, []);
 
+  const closeModal = () => {
+    setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
+    setPedidoError('');
+  };
+
+  const openEdit = (f) => {
+    const sub = Number(f.subtotal) || 0;
+    const imp = Number(f.impuesto) || 0;
+    setInitialData({
+      numeroFactura:    f.numero_factura,
+      idPedido:         String(f.pedido_id_pedido ?? ''),
+      fechaEmision:     f.fecha_emision?.slice(0, 10) ?? '',
+      fechaVencimiento: f.fecha_vencimiento?.slice(0, 10) ?? '',
+      subtotal:         String(sub),
+      impuesto:         sub > 0 ? Math.round((imp / sub) * 100) : 0,
+      descuento:        String(Number(f.descuento) || 0),
+      estado:           f.estado ?? 'emitida',
+      trabajador:       String(f.usuario_trab_id ?? ''),
+    });
+    setEditando(f.id_factura);
+    setMenuOpen(null);
+    setPedidoError('');
+    setShowModal(true);
+  };
+
   const filtered = facturas.filter((f) => {
-    const matchSearch = f.numeroFactura.toLowerCase().includes(search.toLowerCase()) ||
-      f.idPedido.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = (f.numero_factura ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      String(f.pedido_id_pedido ?? '').toLowerCase().includes(search.toLowerCase());
     const matchEstado = !filtroEstado || f.estado === filtroEstado;
     return matchSearch && matchEstado;
   });
 
   const handleSave = async (form) => {
+    const storedUser = JSON.parse(localStorage.getItem('siape_user') || 'null');
+    const usuarioTrabId = storedUser?.id || null;
+    const payload = {
+      numero_factura:    form.numeroFactura,
+      fecha_emision:     form.fechaEmision,
+      fecha_vencimiento: form.fechaVencimiento || null,
+      subtotal:          Number(form.subtotal),
+      impuesto:          form.impuesto,
+      descuento:         Number(form.descuento) || 0,
+      estado:            form.estado,
+      usuario_trab_id:   usuarioTrabId,
+      pedido_id_pedido:  form.idPedido,
+    };
+    setPedidoError('');
     try {
-      await api.post('/facturas', {
-        numero_factura:    form.numeroFactura,
-        fecha_emision:     form.fechaEmision,
-        fecha_vencimiento: form.fechaVencimiento || null,
-        subtotal:          Number(form.subtotal),
-        impuesto:          form.impuesto,
-        descuento:         Number(form.descuento) || 0,
-        estado:            form.estado,
-        usuario_trab_id:   Number(form.trabajador) || null,
-        pedido_id_pedido:  form.idPedido,
-      });
+      if (editando) {
+        await api.put(`/facturas/${editando}`, payload);
+      } else {
+        await api.post('/facturas', payload);
+      }
       const { data } = await api.get('/facturas');
       setFacturas(data);
-    } catch {
-      setFacturas((prev) => [...prev, {
-        id: Date.now(),
-        numeroFactura:    form.numeroFactura,
-        fechaEmision:     form.fechaEmision,
-        fechaVencimiento: form.fechaVencimiento,
-        subtotal:         Number(form.subtotal),
-        impuesto:         form.impuesto,
-        descuento:        Number(form.descuento) || 0,
-        total:            form.total,
-        estado:           form.estado,
-        idPedido:         form.idPedido,
-      }]);
+      closeModal();
+    } catch (error) {
+      console.error(error);
+      if (error.response?.status === 409) {
+        setPedidoError(error.response.data?.message || 'Ya existe una factura para ese pedido.');
+      } else {
+        alert(error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} factura`);
+      }
     }
-    setShowModal(false);
   };
 
   return (
@@ -204,10 +248,11 @@ function Facturas() {
           onChange={(e) => setFiltroEstado(e.target.value)}
         >
           <option value=''>Todos los estados</option>
-          <option value='Borrador'>Borrador</option>
-          <option value='Pendiente'>Pendiente</option>
-          <option value='Pagada'>Pagada</option>
-          <option value='Vencida'>Vencida</option>
+          <option value='emitida'>Emitida</option>
+          <option value='pagada'>Pagada</option>
+          <option value='vencida'>Vencida</option>
+          <option value='anulada'>Anulada</option>
+          <option value='parcial'>Parcial</option>
         </select>
         <button className={styles.btnNew} onClick={() => setShowModal(true)}>
           + Generar Nueva Factura
@@ -228,15 +273,16 @@ function Facturas() {
               <th>Total</th>
               <th>Estado</th>
               <th>ID Pedido</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((f) => (
-              <tr key={f.id}>
-                <td className={styles.mono}>{f.id}</td>
-                <td className={styles.factNum}>{f.numeroFactura}</td>
-                <td>{formatDate(f.fechaEmision)}</td>
-                <td>{formatDate(f.fechaVencimiento)}</td>
+              <tr key={f.id_factura}>
+                <td className={styles.mono}>{f.id_factura}</td>
+                <td className={styles.factNum}>{f.numero_factura}</td>
+                <td>{formatDate(f.fecha_emision)}</td>
+                <td>{formatDate(f.fecha_vencimiento)}</td>
                 <td>{formatCOP(f.subtotal)}</td>
                 <td>{formatCOP(f.impuesto)}</td>
                 <td>{formatCOP(f.descuento)}</td>
@@ -246,7 +292,34 @@ function Facturas() {
                     {f.estado}
                   </span>
                 </td>
-                <td className={styles.mono}>{f.idPedido}</td>
+                <td className={styles.mono}>{f.pedido_id_pedido}</td>
+                <td className={styles.menuCell}>
+                  <div className={styles.menuWrap}>
+                    <button
+                      className={styles.menuBtn}
+                      onClick={() => setMenuOpen(menuOpen === f.id_factura ? null : f.id_factura)}
+                    >⋮</button>
+                    {menuOpen === f.id_factura && (
+                      <div className={styles.dropdown}>
+                        <button onClick={() => openEdit(f)}>✏️ Editar</button>
+                        <button
+                          className={styles.dangerItem}
+                          onClick={async () => {
+                            if (!window.confirm(`¿Eliminar la factura "${f.numero_factura}"? Esta acción no se puede deshacer.`)) return;
+                            setMenuOpen(null);
+                            try {
+                              await api.delete(`/facturas/${f.id_factura}`);
+                              setFacturas((prev) => prev.filter((x) => x.id_factura !== f.id_factura));
+                            } catch (error) {
+                              console.error(error);
+                              alert(error.response?.data?.message || 'Error al eliminar factura');
+                            }
+                          }}
+                        >🗑️ Eliminar</button>
+                      </div>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -258,11 +331,13 @@ function Facturas() {
 
       {showModal && (
         <FacturaModal
-          onClose={() => setShowModal(false)}
+          onClose={closeModal}
           onSave={handleSave}
           pedidos={pedidos}
           trabajadores={trabajadores}
           nextNum={facturas.length + 1}
+          initialData={initialData}
+          pedidoError={pedidoError}
         />
       )}
     </div>

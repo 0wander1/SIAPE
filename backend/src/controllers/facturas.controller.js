@@ -23,6 +23,7 @@ async function getById(req, res, next) {
 
 async function create(req, res, next) {
   try {
+    console.log(req.body);
     const { numero_factura, fecha_emision, subtotal, estado, usuario_trab_id, pedido_id_pedido } = req.body;
 
     if (!numero_factura || !fecha_emision || subtotal === undefined || !estado || !usuario_trab_id || !pedido_id_pedido) {
@@ -34,6 +35,9 @@ async function create(req, res, next) {
     const nueva = await facturasService.create(req.body);
     return res.status(201).json({ message: 'Factura creada exitosamente.', factura: nueva });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY' || error.status === 409) {
+      return res.status(409).json({ message: error.message || 'Ya existe una factura para ese pedido.' });
+    }
     next(error);
   }
 }
