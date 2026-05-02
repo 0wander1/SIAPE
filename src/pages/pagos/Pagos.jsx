@@ -3,38 +3,43 @@ import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
-import { mockPagos, mockFacturas, mockTrabajadores } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Pagos.module.css';
 
 const metodoBadge = (metodo) => {
   const map = {
-    'Transferencia': styles.badgeTransfer,
-    'Efectivo': styles.badgeCash,
-    'Tarjeta': styles.badgeCard,
-    'PSE': styles.badgePse,
+    'transferencia':   styles.badgeTransfer,
+    'efectivo':        styles.badgeCash,
+    'tarjeta_credito': styles.badgeCard,
+    'tarjeta_debito':  styles.badgeCard,
+    'cheque':          styles.badgePse,
   };
   return map[metodo] || styles.badgeTransfer;
 };
 
-const emptyForm = {
-  idFactura: '', monto: '', fecha: '', metodo: 'Transferencia',
-  trabajador: '', referencia: '',
-};
+function PagoModal({ onClose, onSave, facturas, pagos }) {
+  const [form, setForm] = useState({
+    idFactura: '', monto: '', fecha: '', metodo: 'transferencia', referencia: '',
+  });
+  const [saldoInfo, setSaldoInfo] = useState(null);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
+  const [searchFactura, setSearchFactura] = useState('');
 
-function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
-  const [form, setForm] = useState(emptyForm);
-
-  // form.idFactura almacena el ID numérico de la factura
-  const facturaSeleccionada = facturas.find(
-    (f) => (f.id ?? f.id_factura) == form.idFactura
-  );
-  const montoPendiente = facturaSeleccionada
-    ? (facturaSeleccionada.total ?? 0) - pagos
-        .filter((p) => (p.factura_id_factura ?? p.idFactura) == form.idFactura)
-        .reduce((s, p) => s + (p.monto_pagado ?? p.monto ?? 0), 0)
-    : 0;
+  useEffect(() => {
+    if (!form.idFactura) { setSaldoInfo(null); return; }
+    setLoadingSaldo(true);
+    api.get(`/facturas/${form.idFactura}`)
+      .then(({ data }) => {
+        const pagado = pagos
+          .filter((p) => p.factura_id_factura == form.idFactura)
+          .reduce((s, p) => s + Number(p.monto_pagado ?? 0), 0);
+        const total = Number(data.total ?? 0);
+        setSaldoInfo({ total, pagado, saldo: total - pagado });
+      })
+      .catch(() => setSaldoInfo(null))
+      .finally(() => setLoadingSaldo(false));
+  }, [form.idFactura]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -45,6 +50,13 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
     <Modal title='Registrar Nuevo Pago' onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormRow>
+          <FormField label='Buscar factura'>
+            <Input
+              value={searchFactura}
+              onChange={(e) => setSearchFactura(e.target.value)}
+              placeholder='Número de factura...'
+            />
+          </FormField>
           <FormField label='Factura Asociada' required>
             <Select
               value={form.idFactura}
@@ -52,22 +64,36 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
               required
             >
               <option value=''>Seleccionar factura...</option>
-              {facturas.map((f) => {
-                const fId  = f.id ?? f.id_factura;
-                const fNum = f.numeroFactura ?? f.numero_factura;
-                const fTotal = f.total ?? 0;
+              {facturas.filter((f) => (f.estado === 'emitida' || f.estado === 'parcial') &&
+                (f.numero_factura ?? f.numeroFactura ?? '').toLowerCase().includes(searchFactura.toLowerCase())
+              ).map((f) => {
+                const fId  = f.id_factura ?? f.id;
+                const fNum = f.numero_factura ?? f.numeroFactura;
                 return (
                   <option key={fId} value={fId}>
-                    {fNum} — {formatCOP(fTotal)}
+                    {fNum} — {formatCOP(f.total ?? 0)}
                   </option>
                 );
               })}
             </Select>
           </FormField>
-          <FormField label='Monto a Registrar (calculado)'>
-            <Input value={facturaSeleccionada ? formatCOP(montoPendiente) : '-'} disabled />
-          </FormField>
         </FormRow>
+
+        {loadingSaldo && (
+          <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>Cargando saldo...</p>
+        )}
+        {saldoInfo && (
+          <div style={{
+            background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8,
+            padding: '12px 16px', fontSize: 13, display: 'flex', gap: 24, flexWrap: 'wrap',
+          }}>
+            <span>Total factura: <strong>{formatCOP(saldoInfo.total)}</strong></span>
+            <span>Ya pagado: <strong>{formatCOP(saldoInfo.pagado)}</strong></span>
+            <span>Saldo pendiente: <strong style={{ color: saldoInfo.saldo === 0 ? '#16a34a' : '#dc2626' }}>
+              {formatCOP(saldoInfo.saldo)}
+            </strong></span>
+          </div>
+        )}
 
         <FormRow>
           <FormField label='Monto del Pago (COP)' required>
@@ -77,6 +103,7 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
           </FormField>
           <FormField label='Fecha del Pago' required>
             <Input type='date' value={form.fecha}
+              max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => setForm({ ...form, fecha: e.target.value })} required />
           </FormField>
         </FormRow>
@@ -85,10 +112,11 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
           <FormField label='Método de Pago'>
             <Select value={form.metodo}
               onChange={(e) => setForm({ ...form, metodo: e.target.value })}>
-              <option value='Transferencia'>Transferencia</option>
-              <option value='Efectivo'>Efectivo</option>
-              <option value='Tarjeta'>Tarjeta</option>
-              <option value='PSE'>PSE</option>
+              <option value='transferencia'>Transferencia</option>
+              <option value='efectivo'>Efectivo</option>
+              <option value='tarjeta_credito'>Tarjeta Crédito</option>
+              <option value='tarjeta_debito'>Tarjeta Débito</option>
+              <option value='cheque'>Cheque</option>
             </Select>
           </FormField>
           <FormField label='Referencia'>
@@ -97,19 +125,6 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
               placeholder='Número de comprobante' />
           </FormField>
         </FormRow>
-
-        <FormField label='Trabajador que Registra'>
-          <Select value={form.trabajador}
-            onChange={(e) => setForm({ ...form, trabajador: e.target.value })}>
-            <option value=''>Seleccionar...</option>
-            {trabajadores.map((t) => {
-              const tId = t.id ?? t.id_usuario_trab;
-              return (
-                <option key={tId} value={tId}>{t.nombre ?? t.user_name}</option>
-              );
-            })}
-          </Select>
-        </FormField>
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
@@ -121,13 +136,19 @@ function PagoModal({ onClose, onSave, facturas, trabajadores, pagos }) {
 }
 
 function Pagos() {
-  const [pagos, setPagos] = useState(mockPagos);
-  const [facturas, setFacturas] = useState(mockFacturas);
-  const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
+  const [pagos, setPagos] = useState([]);
+  const [facturas, setFacturas] = useState([]);
+  const [trabajadores, setTrabajadores] = useState([]);
   const [search, setSearch] = useState('');
   const [filtroMetodo, setFiltroMetodo] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpen(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     api.get('/pagos')
@@ -145,39 +166,31 @@ function Pagos() {
 
   const filtered = pagos.filter((p) => {
     const matchSearch =
-      p.idFactura.toLowerCase().includes(search.toLowerCase()) ||
-      p.referencia.toLowerCase().includes(search.toLowerCase());
-    const matchMetodo = !filtroMetodo || p.metodo === filtroMetodo;
+      String(p.factura_id_factura ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.referencia_transaccion ?? '').toLowerCase().includes(search.toLowerCase());
+    const matchMetodo = !filtroMetodo || p.metodo_pago === filtroMetodo;
     return matchSearch && matchMetodo;
   });
 
   const handleSave = async (form) => {
+    const storedUser = JSON.parse(localStorage.getItem('siape_user') || 'null');
+    const usuarioTrabId = storedUser?.id || null;
     try {
       await api.post('/pagos', {
-        monto_pagado:               Number(form.monto),
-        fecha_pago:                 form.fecha,
-        metodo_pago:                form.metodo,
-        referencia_transaccion:     form.referencia || null,
-        factura_id_factura:         Number(form.idFactura),
-        usuario_trab_id_usuario_trab: Number(form.trabajador) || null,
+        monto_pagado:                 Number(form.monto),
+        fecha_pago:                   form.fecha,
+        metodo_pago:                  form.metodo,
+        referencia_transaccion:       form.referencia || null,
+        factura_id_factura:           Number(form.idFactura),
+        usuario_trab_id_usuario_trab: usuarioTrabId,
       });
       const { data } = await api.get('/pagos');
       setPagos(data);
-    } catch {
-      const trab = trabajadores.find(
-        (t) => (t.id ?? t.id_usuario_trab) == form.trabajador
-      );
-      setPagos((prev) => [...prev, {
-        id: Date.now(),
-        idFactura: form.idFactura,
-        monto: Number(form.monto),
-        fecha: form.fecha,
-        metodo: form.metodo,
-        referencia: form.referencia || '-',
-        registradoPor: trab?.nombre ?? trab?.user_name ?? 'Sistema',
-      }]);
+      setShowModal(false);
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Error al registrar pago');
     }
-    setShowModal(false);
   };
 
   return (
@@ -198,10 +211,11 @@ function Pagos() {
           onChange={(e) => setFiltroMetodo(e.target.value)}
         >
           <option value=''>Todos los métodos</option>
-          <option value='Transferencia'>Transferencia</option>
-          <option value='Efectivo'>Efectivo</option>
-          <option value='Tarjeta'>Tarjeta</option>
-          <option value='PSE'>PSE</option>
+          <option value='transferencia'>Transferencia</option>
+          <option value='efectivo'>Efectivo</option>
+          <option value='tarjeta_credito'>Tarjeta Crédito</option>
+          <option value='tarjeta_debito'>Tarjeta Débito</option>
+          <option value='cheque'>Cheque</option>
         </select>
         <button className={styles.btnNew} onClick={() => setShowModal(true)}>
           + Registrar Nuevo Pago
@@ -224,31 +238,40 @@ function Pagos() {
           </thead>
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.id}>
-                <td className={styles.mono}>{p.id}</td>
-                <td className={styles.factId}>{p.idFactura}</td>
-                <td className={styles.monto}>{formatCOP(p.monto)}</td>
-                <td>{formatDate(p.fecha)}</td>
+              <tr key={p.id_pago}>
+                <td className={styles.mono}>{p.id_pago}</td>
+                <td className={styles.factId}>{p.factura_id_factura}</td>
+                <td className={styles.monto}>{formatCOP(p.monto_pagado)}</td>
+                <td>{formatDate(p.fecha_pago)}</td>
                 <td>
-                  <span className={`${styles.badge} ${metodoBadge(p.metodo)}`}>
-                    {p.metodo}
+                  <span className={`${styles.badge} ${metodoBadge(p.metodo_pago)}`}>
+                    {p.metodo_pago}
                   </span>
                 </td>
-                <td className={styles.mono}>{p.referencia}</td>
-                <td>{p.registradoPor}</td>
+                <td className={styles.mono}>{p.referencia_transaccion ?? '—'}</td>
+                <td className={styles.mono}>{p.usuario_trab_id_usuario_trab ?? '—'}</td>
                 <td className={styles.menuCell}>
                   <div className={styles.menuWrap}>
                     <button
                       className={styles.menuBtn}
-                      onClick={() => setMenuOpen(menuOpen === p.id ? null : p.id)}
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === p.id_pago ? null : p.id_pago); }}
                     >⋮</button>
-                    {menuOpen === p.id && (
+                    {menuOpen === p.id_pago && (
                       <div className={styles.dropdown}>
-                        <button onClick={() => setMenuOpen(null)}>📄 Ver detalle</button>
-                        <button className={styles.dangerItem} onClick={() => {
-                          setPagos(pagos.filter((x) => x.id !== p.id));
-                          setMenuOpen(null);
-                        }}>🗑️ Eliminar</button>
+                        <button
+                          className={styles.dangerItem}
+                          onClick={async () => {
+                            if (!window.confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return;
+                            setMenuOpen(null);
+                            try {
+                              await api.delete(`/pagos/${p.id_pago}`);
+                              setPagos((prev) => prev.filter((x) => x.id_pago !== p.id_pago));
+                            } catch (error) {
+                              console.error(error);
+                              alert(error.response?.data?.message || 'Error al eliminar pago');
+                            }
+                          }}
+                        >🗑️ Eliminar</button>
                       </div>
                     )}
                   </div>
@@ -267,7 +290,6 @@ function Pagos() {
           onClose={() => setShowModal(false)}
           onSave={handleSave}
           facturas={facturas}
-          trabajadores={trabajadores}
           pagos={pagos}
         />
       )}

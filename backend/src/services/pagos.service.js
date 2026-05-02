@@ -45,6 +45,28 @@ async function create(data) {
     usuario_trab_id_usuario_trab,
   } = data;
 
+  const [[factura]] = await pool.query(
+    'SELECT total FROM factura WHERE id_factura = ?',
+    [factura_id_factura]
+  );
+  if (!factura) {
+    throw Object.assign(new Error('Factura no encontrada.'), { status: 404 });
+  }
+
+  const [[{ suma }]] = await pool.query(
+    'SELECT COALESCE(SUM(monto_pagado), 0) AS suma FROM pago WHERE factura_id_factura = ?',
+    [factura_id_factura]
+  );
+
+  const saldo_pendiente = Number(factura.total) - Number(suma);
+
+  if (Number(monto_pagado) > saldo_pendiente) {
+    throw Object.assign(
+      new Error(`El monto supera el saldo pendiente (${saldo_pendiente})`),
+      { status: 422 }
+    );
+  }
+
   const [result] = await pool.query(
     `INSERT INTO pago
       (monto_pagado, fecha_pago, metodo_pago, referencia_transaccion,
@@ -58,6 +80,13 @@ async function create(data) {
       factura_id_factura,
       usuario_trab_id_usuario_trab,
     ]
+  );
+
+  const nuevoSaldo = saldo_pendiente - Number(monto_pagado);
+  const nuevoEstado = nuevoSaldo === 0 ? 'pagada' : 'parcial';
+  await pool.query(
+    'UPDATE factura SET estado = ? WHERE id_factura = ?',
+    [nuevoEstado, factura_id_factura]
   );
 
   return getById(result.insertId);
