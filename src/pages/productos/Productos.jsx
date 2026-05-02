@@ -14,6 +14,8 @@ const emptyForm = {
   lote: '',
   fecha_vencimiento: '',
   bodega_id_bodega: '',
+  cantidad: '',
+  cantidad_minima: '0',
 };
 
 function ProductoModal({ onClose, onSave, bodegas }) {
@@ -85,6 +87,30 @@ function ProductoModal({ onClose, onSave, bodegas }) {
           </FormField>
         </FormRow>
 
+        <FormRow>
+          <FormField label='Cantidad Disponible' required>
+            <Input
+              type='number'
+              name='cantidad'
+              value={form.cantidad}
+              onChange={handleChange}
+              placeholder='0'
+              min='0'
+              required
+            />
+          </FormField>
+          <FormField label='Cantidad Mínima'>
+            <Input
+              type='number'
+              name='cantidad_minima'
+              value={form.cantidad_minima}
+              onChange={handleChange}
+              placeholder='0'
+              min='0'
+            />
+          </FormField>
+        </FormRow>
+
         <FormField label='Bodega' required>
           <Select
             name='bodega_id_bodega'
@@ -116,6 +142,7 @@ function Productos() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     api.get('/productos')
@@ -135,12 +162,14 @@ function Productos() {
   const handleSave = async (form) => {
     try {
       await api.post('/productos', {
-        nombre_producto:  form.nombre_producto,
-        valor_neto:       Number(form.valor_neto),
-        valor_de_venta:      Number(form.valor_de_venta),
-        lote:             form.lote || null,
+        nombre_producto:   form.nombre_producto,
+        valor_neto:        Number(form.valor_neto),
+        valor_de_venta:    Number(form.valor_de_venta),
+        lote:              form.lote || null,
         fecha_vencimiento: form.fecha_vencimiento || null,
-        bodega_id_bodega: Number(form.bodega_id_bodega),
+        bodega_id_bodega:  Number(form.bodega_id_bodega),
+        cantidad:          Number(form.cantidad),
+        cantidad_minima:   Number(form.cantidad_minima) || 0,
       });
       const { data } = await api.get('/productos');
       setProductos(data);
@@ -161,10 +190,16 @@ function Productos() {
     setShowModal(false);
   };
 
-  const handleDelete = (id) => {
-    api.delete(`/productos/${id}`).catch(() => {});
-    setProductos((prev) => prev.filter((p) => p.id_producto !== id));
+  const handleDelete = async (id) => {
     setMenuOpen(null);
+    try {
+      await api.delete(`/productos/${id}`);
+      setProductos((prev) => prev.filter((p) => p.id_producto !== id));
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Error al eliminar el producto';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
+    }
   };
 
   const bodegaLabel = (id) => {
@@ -174,6 +209,20 @@ function Productos() {
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.pageHeader}>
         <h2 className={styles.pageTitle}>Productos</h2>
         <p className={styles.pageSubtitle}>Gestión de productos</p>

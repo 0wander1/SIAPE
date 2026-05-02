@@ -10,7 +10,20 @@ const CAMPOS_PERMITIDOS_UPDATE = [
 
 async function getAll() {
   const [rows] = await pool.query(
-    'SELECT * FROM inventario ORDER BY id_inventario DESC'
+    `SELECT
+       i.id_inventario,
+       i.cantidad_disponible,
+       i.cantidad_reservada,
+       i.cantidad_minima,
+       i.ultima_actualizacion,
+       i.producto_id_producto,
+       i.bodega_id_bodega,
+       p.nombre_producto,
+       b.descripcion AS descripcion_bodega
+     FROM inventario i
+     LEFT JOIN producto p ON i.producto_id_producto = p.id_producto
+     LEFT JOIN bodega b   ON i.bodega_id_bodega = b.id_bodega
+     ORDER BY i.id_inventario DESC`
   );
   return rows;
 }
