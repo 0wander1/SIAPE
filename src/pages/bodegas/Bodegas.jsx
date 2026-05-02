@@ -12,8 +12,8 @@ const emptyForm = {
   capacidadActual: '', tipo: 'Seca', estado: true, trabajador: '',
 };
 
-function BodegaModal({ onClose, onSave, trabajadores }) {
-  const [form, setForm] = useState(emptyForm);
+function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit }) {
+  const [form, setForm] = useState(initialData ?? emptyForm);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -26,7 +26,7 @@ function BodegaModal({ onClose, onSave, trabajadores }) {
   };
 
   return (
-    <Modal title='Agregar Bodega' onClose={onClose} size='lg'>
+    <Modal title={isEdit ? 'Editar Bodega' : 'Agregar Bodega'} onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormField label='Descripción' required>
           <Input name='descripcion' value={form.descripcion} onChange={handleChange}
@@ -89,7 +89,7 @@ function BodegaModal({ onClose, onSave, trabajadores }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Guardar Bodega</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Actualizar Bodega' : 'Guardar Bodega'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -101,10 +101,13 @@ function Bodegas() {
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [initialData, setInitialData] = useState(null);
 
   useEffect(() => {
     api.get('/bodegas')
-      .then(({ data }) => setBodegas(data))
+      .then(({ data }) => { console.log('GET /api/bodegas →', data); setBodegas(data); })
       .catch(() => {});
 
     api.get('/trabajadores')
@@ -114,40 +117,63 @@ function Bodegas() {
 
   const filtered = bodegas.filter(
     (b) =>
-      b.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-      b.ciudad.toLowerCase().includes(search.toLowerCase())
+      (b.descripcion ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (b.ciudad ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = async (form) => {
-    try {
-      await api.post('/bodegas', {
-        descripcion:                form.descripcion,
-        ubicacion:                  form.ubicacion,
-        ciudad:                     form.ciudad,
-        capacidad_maxima:           Number(form.capacidadMaxima),
-        capacidad_actual:           Number(form.capacidadActual) || 0,
-        tipo_bodega:                form.tipo,
-        activa:                     form.estado ? 1 : 0,
-        usuario_trab_id_responsable: Number(form.trabajador) || null,
-      });
-      const { data } = await api.get('/bodegas');
-      setBodegas(data);
-    } catch {
-      setBodegas((prev) => [...prev, {
-        id: Date.now(),
-        descripcion: form.descripcion,
-        ubicacion: form.ubicacion,
-        ciudad: form.ciudad,
-        capacidadMaxima: Number(form.capacidadMaxima),
-        capacidadActual: Number(form.capacidadActual) || 0,
-        tipo: form.tipo,
-        estado: form.estado ? 'Activa' : 'Inactiva',
-      }]);
-    }
+  const closeModal = () => {
     setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
   };
 
-  const pct = (b) => Math.round((b.capacidadActual / b.capacidadMaxima) * 100);
+  const openEdit = (b) => {
+    setInitialData({
+      descripcion:      b.descripcion,
+      ubicacion:        b.ubicacion,
+      ciudad:           b.ciudad,
+      capacidadMaxima:  String(b.capacidad_maxima ?? ''),
+      capacidadActual:  String(b.capacidad_actual ?? ''),
+      tipo:             b.tipo_bodega ?? 'Seca',
+      estado:           !!b.activa,
+      trabajador:       String(b.usuario_trab_id_responsable ?? ''),
+    });
+    setEditando(b.id_bodega);
+    setMenuOpen(null);
+    setShowModal(true);
+  };
+
+  const handleSave = async (form) => {
+    const payload = {
+      descripcion:                 form.descripcion,
+      ubicacion:                   form.ubicacion,
+      ciudad:                      form.ciudad,
+      capacidad_maxima:            Number(form.capacidadMaxima),
+      capacidad_actual:            Number(form.capacidadActual) || 0,
+      tipo_bodega:                 form.tipo,
+      activa:                      form.estado ? 1 : 0,
+      usuario_trab_id_responsable: Number(form.trabajador) || null,
+    };
+    try {
+      if (editando) {
+        await api.put(`/bodegas/${editando}`, payload);
+      } else {
+        await api.post('/bodegas', payload);
+      }
+      const { data } = await api.get('/bodegas');
+      setBodegas(data);
+      closeModal();
+    } catch {
+      closeModal();
+    }
+  };
+
+  const pct = (b) => {
+    const actual = b.capacidad_actual ?? 0;
+    const maxima = b.capacidad_maxima ?? 0;
+    if (!maxima) return 0;
+    return Math.min(100, Math.round((actual / maxima) * 100));
+  };
 
   return (
     <div className={styles.page}>
@@ -161,7 +187,7 @@ function Bodegas() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+        <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
           + Agregar Bodega
         </button>
       </div>
@@ -178,16 +204,17 @@ function Bodegas() {
               <th>Cap. Actual</th>
               <th>Tipo</th>
               <th>Estado</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((b) => (
-              <tr key={b.id}>
-                <td className={styles.mono}>{b.id}</td>
+              <tr key={b.id_bodega}>
+                <td className={styles.mono}>{b.id_bodega}</td>
                 <td className={styles.nombre}>{b.descripcion}</td>
                 <td className={styles.small}>{b.ubicacion}</td>
                 <td>{b.ciudad}</td>
-                <td>{b.capacidadMaxima.toLocaleString()}</td>
+                <td>{(b.capacidad_maxima ?? 0).toLocaleString()}</td>
                 <td>
                   <div className={styles.progressWrap}>
                     <div className={styles.progressBar}>
@@ -198,16 +225,39 @@ function Bodegas() {
                         style={{ width: `${pct(b)}%` }}
                       />
                     </div>
-                    <span className={styles.pctLabel}>{b.capacidadActual} ({pct(b)}%)</span>
+                    <span className={styles.pctLabel}>{(b.capacidad_actual ?? 0).toLocaleString()} ({pct(b)}%)</span>
                   </div>
                 </td>
                 <td>
-                  <span className={styles.tipoBadge}>{b.tipo}</span>
+                  <span className={styles.tipoBadge}>{b.tipo_bodega}</span>
                 </td>
                 <td>
-                  <span className={b.estado === 'Activa' ? styles.estadoActive : styles.estadoInactive}>
-                    {b.estado}
+                  <span className={b.activa ? styles.estadoActive : styles.estadoInactive}>
+                    {b.activa ? 'Activa' : 'Inactiva'}
                   </span>
+                </td>
+                <td className={styles.menuCell}>
+                  <div className={styles.menuWrap}>
+                    <button
+                      className={styles.menuBtn}
+                      onClick={() => setMenuOpen(menuOpen === b.id_bodega ? null : b.id_bodega)}
+                    >⋮</button>
+                    {menuOpen === b.id_bodega && (
+                      <div className={styles.dropdown}>
+                        <button onClick={() => openEdit(b)}>✏️ Editar</button>
+                        <button className={styles.dangerItem} onClick={async () => {
+                          if (!window.confirm(`¿Eliminar la bodega "${b.descripcion}"? Esta acción no se puede deshacer.`)) return;
+                          setMenuOpen(null);
+                          try {
+                            await api.delete(`/bodegas/${b.id_bodega}`);
+                            setBodegas((prev) => prev.filter((x) => x.id_bodega !== b.id_bodega));
+                          } catch {
+                            window.alert('No se pudo eliminar la bodega. Intenta de nuevo.');
+                          }
+                        }}>🗑️ Eliminar</button>
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -218,9 +268,11 @@ function Bodegas() {
 
       {showModal && (
         <BodegaModal
-          onClose={() => setShowModal(false)}
+          onClose={closeModal}
           onSave={handleSave}
           trabajadores={trabajadores}
+          initialData={initialData}
+          isEdit={!!editando}
         />
       )}
     </div>
