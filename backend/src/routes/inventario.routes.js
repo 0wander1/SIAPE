@@ -4,10 +4,11 @@ const { verifyToken } = require('../middlewares/auth.middleware');
 
 const router = Router();
 
-router.get('/',       verifyToken, inventarioController.getAll);
-router.get('/:id',    verifyToken, inventarioController.getById);
-router.post('/',      verifyToken, inventarioController.create);
-router.put('/:id',    verifyToken, inventarioController.update);
-router.delete('/:id', verifyToken, inventarioController.remove);
+router.get('/',                  verifyToken, inventarioController.getAll);
+router.get('/:id',               verifyToken, inventarioController.getById);
+router.post('/',                 verifyToken, inventarioController.create);
+router.post('/carga-masiva',     verifyToken, inventarioController.cargaMasiva);
+router.put('/:id',               verifyToken, inventarioController.update);
+router.delete('/:id',            verifyToken, inventarioController.remove);
 
 module.exports = router;

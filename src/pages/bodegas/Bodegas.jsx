@@ -104,6 +104,7 @@ function Bodegas() {
   const [menuOpen, setMenuOpen] = useState(null);
   const [editando, setEditando] = useState(null);
   const [initialData, setInitialData] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     api.get('/bodegas')
@@ -141,6 +142,18 @@ function Bodegas() {
     setEditando(b.id_bodega);
     setMenuOpen(null);
     setShowModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    const b = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/bodegas/${b.id_bodega}`);
+      setBodegas((prev) => prev.filter((x) => x.id_bodega !== b.id_bodega));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'No se pudo eliminar la bodega.');
+    }
   };
 
   const handleSave = async (form) => {
@@ -191,6 +204,16 @@ function Bodegas() {
           + Agregar Bodega
         </button>
       </div>
+
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar la bodega <strong>{confirmDelete.descripcion}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -245,16 +268,10 @@ function Bodegas() {
                     {menuOpen === b.id_bodega && (
                       <div className={styles.dropdown}>
                         <button onClick={() => openEdit(b)}>✏️ Editar</button>
-                        <button className={styles.dangerItem} onClick={async () => {
-                          if (!window.confirm(`¿Eliminar la bodega "${b.descripcion}"? Esta acción no se puede deshacer.`)) return;
-                          setMenuOpen(null);
-                          try {
-                            await api.delete(`/bodegas/${b.id_bodega}`);
-                            setBodegas((prev) => prev.filter((x) => x.id_bodega !== b.id_bodega));
-                          } catch {
-                            window.alert('No se pudo eliminar la bodega. Intenta de nuevo.');
-                          }
-                        }}>🗑️ Eliminar</button>
+                        <button
+                          className={styles.dangerItem}
+                          onClick={() => { setConfirmDelete(b); setMenuOpen(null); }}
+                        >🗑️ Eliminar</button>
                       </div>
                     )}
                   </div>

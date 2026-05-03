@@ -92,4 +92,87 @@ async function remove(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { getAll, getById, create, update, remove };
+async function cargaMasiva(filas) {
+  let creados = 0;
+  let actualizados = 0;
+  const errores = [];
+
+  const conn = await pool.getConnection();
+  try {
+    for (let i = 0; i < filas.length; i++) {
+      const fila = filas[i];
+      const nombre_producto   = fila.nombre_producto;
+      const bodega_id_bodega  = Number(fila.bodega_id_bodega);
+      const cantidad_disponible = Number(fila.cantidad_disponible) || 0;
+      const cantidad_reservada  = Number(fila.cantidad_reservada)  || 0;
+      const cantidad_minima     = Number(fila.cantidad_minima)     || 0;
+
+      if (!nombre_producto || !bodega_id_bodega) {
+        errores.push(`Fila ${i + 2}: nombre_producto y bodega_id_bodega son requeridos.`);
+        continue;
+      }
+
+      try {
+        await conn.beginTransaction();
+
+        // 1. Buscar o crear el producto por nombre (valores mínimos si es nuevo)
+        const [[productoExistente]] = await conn.query(
+          'SELECT id_producto FROM producto WHERE nombre_producto = ?',
+          [nombre_producto]
+        );
+
+        let producto_id_producto;
+        if (productoExistente) {
+          producto_id_producto = productoExistente.id_producto;
+        } else {
+          const [prodResult] = await conn.query(
+            `INSERT INTO producto
+               (nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega)
+             VALUES (?, 0, 0, NULL, NULL, ?)`,
+            [nombre_producto, bodega_id_bodega]
+          );
+          producto_id_producto = prodResult.insertId;
+        }
+
+        // 2. Buscar o actualizar/crear el registro de inventario
+        const [[invExistente]] = await conn.query(
+          'SELECT id_inventario FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+          [producto_id_producto, bodega_id_bodega]
+        );
+
+        if (invExistente) {
+          await conn.query(
+            `UPDATE inventario SET
+               cantidad_disponible  = ?,
+               cantidad_reservada   = ?,
+               cantidad_minima      = ?,
+               ultima_actualizacion = NOW()
+             WHERE id_inventario = ?`,
+            [cantidad_disponible, cantidad_reservada, cantidad_minima, invExistente.id_inventario]
+          );
+          actualizados++;
+        } else {
+          await conn.query(
+            `INSERT INTO inventario
+               (cantidad_disponible, cantidad_reservada, cantidad_minima,
+                producto_id_producto, bodega_id_bodega, ultima_actualizacion)
+             VALUES (?, ?, ?, ?, ?, NOW())`,
+            [cantidad_disponible, cantidad_reservada, cantidad_minima, producto_id_producto, bodega_id_bodega]
+          );
+          creados++;
+        }
+
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        errores.push(`Fila ${i + 2}: ${err.message}`);
+      }
+    }
+  } finally {
+    conn.release();
+  }
+
+  return { creados, actualizados, errores };
+}
+
+module.exports = { getAll, getById, create, update, remove, cargaMasiva };

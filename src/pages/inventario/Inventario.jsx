@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
@@ -86,6 +87,10 @@ function Inventario() {
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(null);
   const [editando, setEditando] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     api.get('/inventario')
@@ -111,6 +116,91 @@ function Inventario() {
       (item.descripcion_bodega ?? '').toLowerCase().includes(q)
     );
   });
+
+  const handleExport = () => {
+    const fecha = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const nombreArchivo = `reporte-inventario-${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}.xlsx`;
+
+    const filas = filtered.map((item) => ({
+      'ID':                    item.id_inventario,
+      'Producto':              item.nombre_producto ?? '',
+      'Bodega':                item.descripcion_bodega ?? '',
+      'Cantidad Disponible':   item.cantidad_disponible,
+      'Cantidad Reservada':    item.cantidad_reservada,
+      'Cantidad Mínima':       item.cantidad_minima,
+      'Última Actualización':  item.ultima_actualizacion
+        ? new Date(item.ultima_actualizacion).toLocaleDateString('es-CO')
+        : '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+    XLSX.writeFile(wb, nombreArchivo);
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setImportando(true);
+    setImportMsg(null);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const filas = XLSX.utils.sheet_to_json(ws);
+
+      if (filas.length === 0) {
+        setImportMsg({ type: 'error', text: 'El archivo no contiene filas de datos.' });
+        setImportando(false);
+        return;
+      }
+
+      const { data } = await api.post('/inventario/carga-masiva', filas);
+      const { creados, actualizados, errores } = data;
+
+      const { data: inv } = await api.get('/inventario');
+      setItems(inv);
+
+      const totalOk = creados + actualizados;
+      if (errores.length === 0) {
+        setImportMsg({
+          type: 'success',
+          text: `Carga exitosa — ${creados} creado(s), ${actualizados} actualizado(s).`,
+        });
+      } else {
+        const resumen = errores.slice(0, 3).join(' | ') + (errores.length > 3 ? '…' : '');
+        setImportMsg({
+          type: totalOk === 0 ? 'error' : 'warning',
+          text: `${creados} creado(s), ${actualizados} actualizado(s), ${errores.length} con error: ${resumen}`,
+        });
+      }
+    } catch (err) {
+      setImportMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'No se pudo procesar el archivo. Verifica que sea un Excel válido (.xlsx / .xls).',
+      });
+    } finally {
+      setImportando(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const item = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/inventario/${item.id_inventario}`);
+      await api.delete(`/productos/${item.producto_id_producto}`);
+      setItems((prev) => prev.filter((i) => i.id_inventario !== item.id_inventario));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Error al eliminar el producto o su inventario');
+    }
+  };
 
   const handleUpdate = async (form) => {
     try {
@@ -142,10 +232,40 @@ function Inventario() {
           />
         </div>
         <div className={styles.actions}>
-          <button className={styles.btnOutline}>📄 Exportar Reporte</button>
-          <button className={styles.btnOutline}>📂 Cargar Excel</button>
+          <button className={styles.btnOutline} onClick={handleExport}>📄 Exportar Reporte</button>
+          <input
+            ref={fileInputRef}
+            type='file'
+            accept='.xlsx,.xls'
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
+          <button
+            className={styles.btnOutline}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importando}
+          >
+            {importando ? 'Importando...' : '📂 Cargar Excel'}
+          </button>
         </div>
       </div>
+
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar el producto <strong>{confirmDelete.nombre_producto ?? confirmDelete.producto_id_producto}</strong> y su inventario? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
+
+      {importMsg && (
+        <div className={`${styles.importBanner} ${styles[`importBanner_${importMsg.type}`]}`}>
+          <span>{importMsg.text}</span>
+          <button onClick={() => setImportMsg(null)} className={styles.importBannerClose}>✕</button>
+        </div>
+      )}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -190,18 +310,7 @@ function Inventario() {
                         <button onClick={() => { setEditando(item); setMenuOpen(null); }}>✏️ Editar</button>
                         <button
                           className={styles.dangerItem}
-                          onClick={async () => {
-                            if (!window.confirm(`¿Eliminar el producto "${item.nombre_producto ?? item.producto_id_producto}" y su registro de inventario? Esta acción no se puede deshacer.`)) return;
-                            setMenuOpen(null);
-                            try {
-                              await api.delete(`/inventario/${item.id_inventario}`);
-                              await api.delete(`/productos/${item.producto_id_producto}`);
-                              setItems((prev) => prev.filter((i) => i.id_inventario !== item.id_inventario));
-                            } catch (error) {
-                              console.error(error);
-                              alert(error.response?.data?.message || 'Error al eliminar el producto o su inventario');
-                            }
-                          }}
+                          onClick={() => { setConfirmDelete(item); setMenuOpen(null); }}
                         >🗑️ Eliminar</button>
                       </div>
                     )}

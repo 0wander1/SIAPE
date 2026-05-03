@@ -147,6 +147,7 @@ function Facturas() {
   const [editando, setEditando] = useState(null);
   const [initialData, setInitialData] = useState(null);
   const [pedidoError, setPedidoError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     api.get('/facturas')
@@ -195,6 +196,18 @@ function Facturas() {
     const matchEstado = !filtroEstado || f.estado === filtroEstado;
     return matchSearch && matchEstado;
   });
+
+  const handleConfirmDelete = async () => {
+    const f = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/facturas/${f.id_factura}`);
+      setFacturas((prev) => prev.filter((x) => x.id_factura !== f.id_factura));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Error al eliminar factura');
+    }
+  };
 
   const handleSave = async (form) => {
     const storedUser = JSON.parse(localStorage.getItem('siape_user') || 'null');
@@ -259,6 +272,16 @@ function Facturas() {
         </button>
       </div>
 
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar la factura <strong>{confirmDelete.numero_factura}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
@@ -304,17 +327,7 @@ function Facturas() {
                         <button onClick={() => openEdit(f)}>✏️ Editar</button>
                         <button
                           className={styles.dangerItem}
-                          onClick={async () => {
-                            if (!window.confirm(`¿Eliminar la factura "${f.numero_factura}"? Esta acción no se puede deshacer.`)) return;
-                            setMenuOpen(null);
-                            try {
-                              await api.delete(`/facturas/${f.id_factura}`);
-                              setFacturas((prev) => prev.filter((x) => x.id_factura !== f.id_factura));
-                            } catch (error) {
-                              console.error(error);
-                              alert(error.response?.data?.message || 'Error al eliminar factura');
-                            }
-                          }}
+                          onClick={() => { setConfirmDelete(f); setMenuOpen(null); }}
                         >🗑️ Eliminar</button>
                       </div>
                     )}

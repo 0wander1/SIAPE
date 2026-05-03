@@ -3,51 +3,40 @@ import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, Textarea, FormRow, FormActions, BtnPrimary, BtnSecondary,
 } from '../../components/FormField.jsx';
-import { mockPedidos, mockClientes, mockInventario as mockProductos } from '../../utils/mockData.js';
 import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Pedidos.module.css';
 
-const PRECIO_UNITARIO = {
-  'P001': 3500, 'P002': 11500, 'P003': 8000,
-  'P004': 3000, 'P005': 7000, 'P006': 12000,
-};
-
 const estadoClass = (estado) => {
   const map = {
-    'Pendiente': styles.badgePending,
-    'En tránsito': styles.badgeTransit,
-    'Entregado': styles.badgeDelivered,
-    'Cancelado': styles.badgeCancelled,
+    'pendiente':      styles.badgePending,
+    'confirmado':     styles.badgeConfirmed,
+    'en_preparacion': styles.badgePrep,
+    'despachado':     styles.badgeTransit,
+    'entregado':      styles.badgeDelivered,
+    'cancelado':      styles.badgeCancelled,
   };
   return map[estado] || styles.badgePending;
 };
 
-const emptyForm = {
-  cliente: '',
-  producto: '',
-  cantidad: '',
-  direccion: '',
-  fechaEstimada: '',
-  estado: 'Pendiente',
-  observaciones: '',
-  valorTotal: 0,
-};
+function PedidoModal({ onClose, onSave, clientes, productos, initialData }) {
+  const emptyForm = {
+    cliente: '', producto: '', cantidad: '', direccion: '',
+    fechaEstimada: '', estado: 'pendiente', observaciones: '', valorTotal: 0,
+  };
 
-function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(initialData ?? emptyForm);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     const updated = { ...form, [name]: value };
-
     if (name === 'producto' || name === 'cantidad') {
-      const prodId = name === 'producto' ? value : form.producto;
-      const cant = name === 'cantidad' ? Number(value) : Number(form.cantidad);
-      const precio = PRECIO_UNITARIO[prodId] || 0;
-      updated.valorTotal = precio * cant;
+      const prod = productos.find(
+        (p) => String(p.id_producto ?? p.id) === String(name === 'producto' ? value : form.producto)
+      );
+      const cant = Number(name === 'cantidad' ? value : form.cantidad);
+      updated.valorTotal = prod ? Number(prod.valor_de_venta ?? prod.precio ?? 0) * cant : form.valorTotal;
     }
-
     setForm(updated);
   };
 
@@ -56,8 +45,10 @@ function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
     onSave(form);
   };
 
+  const isEdit = !!initialData;
+
   return (
-    <Modal title='Nuevo Pedido' onClose={onClose} size='lg'>
+    <Modal title={isEdit ? 'Editar Pedido' : 'Nuevo Pedido'} onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormRow>
           <FormField label='Cliente' required>
@@ -91,7 +82,14 @@ function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
             />
           </FormField>
           <FormField label='Estado'>
-            <Input value={form.estado} disabled />
+            <Select name='estado' value={form.estado} onChange={handleChange}>
+              <option value='pendiente'>Pendiente</option>
+              <option value='confirmado'>Confirmado</option>
+              <option value='en_preparacion'>En Preparación</option>
+              <option value='despachado'>Despachado</option>
+              <option value='entregado'>Entregado</option>
+              <option value='cancelado'>Cancelado</option>
+            </Select>
           </FormField>
         </FormRow>
 
@@ -123,7 +121,7 @@ function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Crear Pedido</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Guardar Cambios' : 'Crear Pedido'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -131,67 +129,93 @@ function NuevoPedidoModal({ onClose, onSave, clientes, productos }) {
 }
 
 function Pedidos() {
-  const [pedidos, setPedidos] = useState(mockPedidos);
-  const [clientes, setClientes] = useState(mockClientes);
-  const [productos, setProductos] = useState(mockProductos);
+  const [pedidos, setPedidos]     = useState([]);
+  const [clientes, setClientes]   = useState([]);
+  const [productos, setProductos] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [menuOpen, setMenuOpen]   = useState(null);
+  const [editando, setEditando]   = useState(null);
+  const [initialData, setInitialData] = useState(null);
+  const [errorMsg, setErrorMsg]       = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
-    console.log('[Pedidos] GET /pedidos');
-    api.get('/pedidos')
-      .then(({ data }) => setPedidos(data))
-      .catch(() => {});
-
-    console.log('[Pedidos] GET /clientes');
-    api.get('/clientes')
-      .then(({ data }) => setClientes(data))
-      .catch(() => {});
-
-    console.log('[Pedidos] GET /productos');
-    api.get('/productos')
-      .then(({ data }) => setProductos(data))
-      .catch(() => {});
+    api.get('/pedidos').then(({ data }) => setPedidos(data)).catch(() => {});
+    api.get('/clientes').then(({ data }) => setClientes(data)).catch(() => {});
+    api.get('/productos').then(({ data }) => setProductos(data)).catch(() => {});
   }, []);
 
-  const handleSave = async (form) => {
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpen(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const showError = (msg) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(''), 4000);
+  };
+
+  const handleConfirmDelete = async () => {
+    const p = confirmDelete;
+    setConfirmDelete(null);
     try {
-      const user = JSON.parse(localStorage.getItem('siape_user'));
-      console.log('[Pedidos] POST /pedidos', form);
-      await api.post('/pedidos', {
-        cliente_id_usuario_cli:  Number(form.cliente),
-        producto_id_producto:    form.producto,
-        cantidad:                Number(form.cantidad),
-        estado:                  form.estado,
-        valor_total:             form.valorTotal,
-        direccion_pedido:        form.direccion,
-        fecha_entrega_estimada:  form.fechaEstimada || null,
-        observaciones:           form.observaciones || null,
-        usuario_trab_id:         user?.id,
-      });
-      console.log('[Pedidos] GET /pedidos (refresh)');
+      await api.delete(`/pedidos/${p.id}`);
+      setPedidos((prev) => prev.filter((x) => x.id !== p.id));
+    } catch (error) {
+      console.error(error);
+      showError(error.response?.data?.message || 'Error al eliminar pedido');
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
+  };
+
+  const openEdit = (p) => {
+    setInitialData({
+      cliente:       String(p.clienteId ?? ''),
+      producto:      String(p.productoId ?? ''),
+      cantidad:      String(p.cantidad ?? ''),
+      direccion:     p.direccion ?? '',
+      fechaEstimada: p.fechaEstimada?.slice(0, 10) ?? '',
+      estado:        p.estado ?? 'Pendiente',
+      observaciones: p.observaciones ?? '',
+      valorTotal:    Number(p.valorTotal ?? 0),
+    });
+    setEditando(p.id);
+    setMenuOpen(null);
+    setShowModal(true);
+  };
+
+  const handleSave = async (form) => {
+    const user = JSON.parse(localStorage.getItem('siape_user') || 'null');
+    const payload = {
+      cliente_id_usuario_cli: Number(form.cliente),
+      producto_id_producto:   form.producto,
+      cantidad:               Number(form.cantidad),
+      estado:                 form.estado,
+      valor_total:            form.valorTotal,
+      direccion_pedido:       form.direccion,
+      fecha_entrega_estimada: form.fechaEstimada || null,
+      observaciones:          form.observaciones || null,
+      usuario_trab_id:        user?.id,
+    };
+    try {
+      if (editando) {
+        await api.put(`/pedidos/${editando}`, payload);
+      } else {
+        await api.post('/pedidos', payload);
+      }
       const { data } = await api.get('/pedidos');
       setPedidos(data);
-    } catch {
-      const nombreCliente = clientes.find(
-        (c) => (c.id ?? c.id_usuario_cli) == form.cliente
-      )?.nombre ?? clientes.find(
-        (c) => (c.id ?? c.id_usuario_cli) == form.cliente
-      )?.nombre_usuario ?? form.cliente;
-      const nombreProducto = productos.find((p) => String(p.id_producto ?? p.id) === String(form.producto))?.nombre_producto ?? productos.find((p) => String(p.id_producto ?? p.id) === String(form.producto))?.nombre ?? form.producto;
-      setPedidos((prev) => [{
-        id: `PED-00${prev.length + 1}`,
-        cliente: nombreCliente,
-        producto: nombreProducto,
-        cantidad: Number(form.cantidad),
-        estado: form.estado,
-        valorTotal: form.valorTotal,
-        direccion: form.direccion,
-        fechaEstimada: form.fechaEstimada,
-        fechaReal: null,
-        observaciones: form.observaciones,
-      }, ...prev]);
+      closeModal();
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} pedido`);
     }
-    setShowModal(false);
   };
 
   return (
@@ -202,6 +226,23 @@ function Pedidos() {
           + Nuevo Pedido
         </button>
       </div>
+
+      {errorMsg && (
+        <div className={styles.errorBanner}>
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg('')} className={styles.errorBannerClose}>✕</button>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar el pedido <strong>#{confirmDelete.id}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -217,6 +258,7 @@ function Pedidos() {
               <th>F. Estimada</th>
               <th>F. Real</th>
               <th>Observaciones</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -236,6 +278,23 @@ function Pedidos() {
                 <td>{formatDate(p.fechaEstimada)}</td>
                 <td>{formatDate(p.fechaReal)}</td>
                 <td className={styles.obs}>{p.observaciones || '-'}</td>
+                <td className={styles.menuCell}>
+                  <div className={styles.menuWrap}>
+                    <button
+                      className={styles.menuBtn}
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); }}
+                    >⋮</button>
+                    {menuOpen === p.id && (
+                      <div className={styles.dropdown}>
+                        <button onClick={() => openEdit(p)}>✏️ Editar</button>
+                        <button
+                          className={styles.dangerItem}
+                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                        >🗑️ Eliminar</button>
+                      </div>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -243,11 +302,12 @@ function Pedidos() {
       </div>
 
       {showModal && (
-        <NuevoPedidoModal
-          onClose={() => setShowModal(false)}
+        <PedidoModal
+          onClose={closeModal}
           onSave={handleSave}
           clientes={clientes}
           productos={productos}
+          initialData={initialData}
         />
       )}
     </div>

@@ -143,6 +143,7 @@ function Pagos() {
   const [filtroMetodo, setFiltroMetodo] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     const handleClickOutside = () => setMenuOpen(null);
@@ -171,6 +172,18 @@ function Pagos() {
     const matchMetodo = !filtroMetodo || p.metodo_pago === filtroMetodo;
     return matchSearch && matchMetodo;
   });
+
+  const handleConfirmDelete = async () => {
+    const p = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/pagos/${p.id_pago}`);
+      setPagos((prev) => prev.filter((x) => x.id_pago !== p.id_pago));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'Error al eliminar pago');
+    }
+  };
 
   const handleSave = async (form) => {
     const storedUser = JSON.parse(localStorage.getItem('siape_user') || 'null');
@@ -222,6 +235,16 @@ function Pagos() {
         </button>
       </div>
 
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar el pago <strong>#{confirmDelete.id_pago}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
@@ -260,17 +283,7 @@ function Pagos() {
                       <div className={styles.dropdown}>
                         <button
                           className={styles.dangerItem}
-                          onClick={async () => {
-                            if (!window.confirm('¿Eliminar este pago? Esta acción no se puede deshacer.')) return;
-                            setMenuOpen(null);
-                            try {
-                              await api.delete(`/pagos/${p.id_pago}`);
-                              setPagos((prev) => prev.filter((x) => x.id_pago !== p.id_pago));
-                            } catch (error) {
-                              console.error(error);
-                              alert(error.response?.data?.message || 'Error al eliminar pago');
-                            }
-                          }}
+                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
                         >🗑️ Eliminar</button>
                       </div>
                     )}

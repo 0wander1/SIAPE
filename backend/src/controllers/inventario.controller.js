@@ -62,4 +62,17 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, create, update, remove };
+async function cargaMasiva(req, res, next) {
+  try {
+    const filas = req.body;
+    if (!Array.isArray(filas) || filas.length === 0) {
+      return res.status(400).json({ message: 'El cuerpo debe ser un array de filas no vacío.' });
+    }
+    const resultado = await inventarioService.cargaMasiva(filas);
+    return res.status(200).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { getAll, getById, create, update, remove, cargaMasiva };

@@ -18,8 +18,9 @@ const emptyForm = {
   cantidad_minima: '0',
 };
 
-function ProductoModal({ onClose, onSave, bodegas }) {
-  const [form, setForm] = useState(emptyForm);
+function ProductoModal({ onClose, onSave, bodegas, initialData }) {
+  const isEdit = !!initialData;
+  const [form, setForm] = useState(initialData ?? emptyForm);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -31,7 +32,7 @@ function ProductoModal({ onClose, onSave, bodegas }) {
   };
 
   return (
-    <Modal title='Agregar Producto' onClose={onClose} size='md'>
+    <Modal title={isEdit ? 'Editar Producto' : 'Agregar Producto'} onClose={onClose} size='md'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <FormField label='Nombre del Producto' required>
           <Input
@@ -87,29 +88,31 @@ function ProductoModal({ onClose, onSave, bodegas }) {
           </FormField>
         </FormRow>
 
-        <FormRow>
-          <FormField label='Cantidad Disponible' required>
-            <Input
-              type='number'
-              name='cantidad'
-              value={form.cantidad}
-              onChange={handleChange}
-              placeholder='0'
-              min='0'
-              required
-            />
-          </FormField>
-          <FormField label='Cantidad Mínima'>
-            <Input
-              type='number'
-              name='cantidad_minima'
-              value={form.cantidad_minima}
-              onChange={handleChange}
-              placeholder='0'
-              min='0'
-            />
-          </FormField>
-        </FormRow>
+        {!isEdit && (
+          <FormRow>
+            <FormField label='Cantidad Disponible' required>
+              <Input
+                type='number'
+                name='cantidad'
+                value={form.cantidad}
+                onChange={handleChange}
+                placeholder='0'
+                min='0'
+                required
+              />
+            </FormField>
+            <FormField label='Cantidad Mínima'>
+              <Input
+                type='number'
+                name='cantidad_minima'
+                value={form.cantidad_minima}
+                onChange={handleChange}
+                placeholder='0'
+                min='0'
+              />
+            </FormField>
+          </FormRow>
+        )}
 
         <FormField label='Bodega' required>
           <Select
@@ -129,7 +132,7 @@ function ProductoModal({ onClose, onSave, bodegas }) {
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>Guardar Producto</BtnPrimary>
+          <BtnPrimary type='submit'>{isEdit ? 'Guardar Cambios' : 'Guardar Producto'}</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -143,6 +146,9 @@ function Productos() {
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [initialData, setInitialData] = useState(null);
 
   useEffect(() => {
     api.get('/productos')
@@ -159,42 +165,62 @@ function Productos() {
     (p.lote ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = async (form) => {
-    try {
-      await api.post('/productos', {
-        nombre_producto:   form.nombre_producto,
-        valor_neto:        Number(form.valor_neto),
-        valor_de_venta:    Number(form.valor_de_venta),
-        lote:              form.lote || null,
-        fecha_vencimiento: form.fecha_vencimiento || null,
-        bodega_id_bodega:  Number(form.bodega_id_bodega),
-        cantidad:          Number(form.cantidad),
-        cantidad_minima:   Number(form.cantidad_minima) || 0,
-      });
-      const { data } = await api.get('/productos');
-      setProductos(data);
-    } catch {
-      setProductos((prev) => [
-        {
-          id_producto: Date.now(),
-          nombre_producto: form.nombre_producto,
-          valor_neto: Number(form.valor_neto),
-          valor_de_venta: Number(form.valor_de_venta),
-          lote: form.lote || null,
-          fecha_vencimiento: form.fecha_vencimiento || null,
-          bodega_id_bodega: Number(form.bodega_id_bodega),
-        },
-        ...prev,
-      ]);
-    }
+  const closeModal = () => {
     setShowModal(false);
+    setEditando(null);
+    setInitialData(null);
   };
 
-  const handleDelete = async (id) => {
+  const openEdit = (p) => {
+    setInitialData({
+      nombre_producto:   p.nombre_producto ?? '',
+      valor_neto:        String(p.valor_neto ?? 0),
+      valor_de_venta:    String(p.valor_de_venta ?? 0),
+      lote:              p.lote ?? '',
+      fecha_vencimiento: p.fecha_vencimiento?.slice(0, 10) ?? '',
+      bodega_id_bodega:  String(p.bodega_id_bodega ?? ''),
+    });
+    setEditando(p.id_producto);
     setMenuOpen(null);
+    setShowModal(true);
+  };
+
+  const handleSave = async (form) => {
+    const payload = {
+      nombre_producto:   form.nombre_producto,
+      valor_neto:        Number(form.valor_neto),
+      valor_de_venta:    Number(form.valor_de_venta),
+      lote:              form.lote || null,
+      fecha_vencimiento: form.fecha_vencimiento || null,
+      bodega_id_bodega:  Number(form.bodega_id_bodega),
+    };
     try {
-      await api.delete(`/productos/${id}`);
-      setProductos((prev) => prev.filter((p) => p.id_producto !== id));
+      if (editando) {
+        await api.put(`/productos/${editando}`, payload);
+      } else {
+        await api.post('/productos', {
+          ...payload,
+          cantidad:        Number(form.cantidad),
+          cantidad_minima: Number(form.cantidad_minima) || 0,
+        });
+      }
+      const { data } = await api.get('/productos');
+      setProductos(data);
+      closeModal();
+    } catch (error) {
+      console.error(error);
+      const msg = error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} producto`;
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const p = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/productos/${p.id_producto}`);
+      setProductos((prev) => prev.filter((x) => x.id_producto !== p.id_producto));
     } catch (error) {
       const msg = error.response?.data?.message || 'Error al eliminar el producto';
       setErrorMsg(msg);
@@ -238,10 +264,20 @@ function Productos() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+        <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
           + Agregar Producto
         </button>
       </div>
+
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar el producto <strong>{confirmDelete.nombre_producto}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
@@ -287,13 +323,11 @@ function Productos() {
                     </button>
                     {menuOpen === p.id_producto && (
                       <div className={styles.dropdown}>
-                        <button onClick={() => setMenuOpen(null)}>✏️ Editar</button>
+                        <button onClick={() => openEdit(p)}>✏️ Editar</button>
                         <button
                           className={styles.dangerItem}
-                          onClick={() => handleDelete(p.id_producto)}
-                        >
-                          🗑️ Eliminar
-                        </button>
+                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                        >🗑️ Eliminar</button>
                       </div>
                     )}
                   </div>
@@ -309,9 +343,10 @@ function Productos() {
 
       {showModal && (
         <ProductoModal
-          onClose={() => setShowModal(false)}
+          onClose={closeModal}
           onSave={handleSave}
           bodegas={bodegas}
+          initialData={initialData}
         />
       )}
     </div>

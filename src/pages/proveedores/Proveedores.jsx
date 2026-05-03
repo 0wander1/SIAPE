@@ -120,6 +120,7 @@ function Proveedores() {
   const [nitError, setNitError] = useState('');
   const [editando, setEditando] = useState(null);
   const [initialData, setInitialData] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     api.get('/proveedores')
@@ -162,6 +163,18 @@ function Proveedores() {
     setEditando(null);
     setInitialData(null);
     setNitError('');
+  };
+
+  const handleConfirmDelete = async () => {
+    const p = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/proveedores/${p.id_proveedor}`);
+      setProveedores((prev) => prev.filter((x) => x.id_proveedor !== p.id_proveedor));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'No se pudo eliminar el proveedor.');
+    }
   };
 
   const handleSave = async (form) => {
@@ -209,6 +222,16 @@ function Proveedores() {
         </button>
       </div>
 
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar el proveedor <strong>{confirmDelete.nombre_proveedor}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
@@ -244,16 +267,10 @@ function Proveedores() {
                     {menuOpen === p.id_proveedor && (
                       <div className={styles.dropdown}>
                         <button onClick={() => openEdit(p)}>✏️ Editar</button>
-                        <button className={styles.dangerItem} onClick={async () => {
-                          if (!window.confirm(`¿Eliminar el proveedor "${p.nombre_proveedor}"? Esta acción no se puede deshacer.`)) return;
-                          setMenuOpen(null);
-                          try {
-                            await api.delete(`/proveedores/${p.id_proveedor}`);
-                            setProveedores((prev) => prev.filter((x) => x.id_proveedor !== p.id_proveedor));
-                          } catch {
-                            window.alert('No se pudo eliminar el proveedor. Intenta de nuevo.');
-                          }
-                        }}>🗑️ Eliminar</button>
+                        <button
+                          className={styles.dangerItem}
+                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                        >🗑️ Eliminar</button>
                       </div>
                     )}
                   </div>

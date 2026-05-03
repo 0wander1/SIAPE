@@ -44,6 +44,35 @@ async function create(data) {
   return getById(result.insertId);
 }
 
+async function update(id, data) {
+  const {
+    nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega,
+  } = data;
+
+  const [result] = await pool.query(
+    `UPDATE producto SET
+       nombre_producto   = ?,
+       valor_neto        = ?,
+       valor_de_venta    = ?,
+       lote              = ?,
+       fecha_vencimiento = ?,
+       bodega_id_bodega  = ?
+     WHERE id_producto = ?`,
+    [
+      nombre_producto,
+      Number(valor_neto),
+      Number(valor_de_venta),
+      lote || null,
+      fecha_vencimiento || null,
+      Number(bodega_id_bodega),
+      id,
+    ]
+  );
+
+  if (result.affectedRows === 0) return null;
+  return getById(id);
+}
+
 async function remove(id) {
   const [[pedido]] = await pool.query(
     'SELECT id_pedido FROM pedido_externo WHERE producto_id_producto = ? LIMIT 1',
@@ -63,4 +92,4 @@ async function remove(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { getAll, getById, create, remove };
+module.exports = { getAll, getById, create, update, remove };

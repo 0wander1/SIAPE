@@ -105,6 +105,7 @@ function Trabajadores() {
   const [menuOpen, setMenuOpen] = useState(null);
   const [editando, setEditando] = useState(null);
   const [initialData, setInitialData] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     api.get('/trabajadores')
@@ -132,6 +133,18 @@ function Trabajadores() {
     setEditando(t.id_usuario_trab);
     setMenuOpen(null);
     setShowModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    const t = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/trabajadores/${t.id_usuario_trab}`);
+      setTrabajadores((prev) => prev.filter((x) => x.id_usuario_trab !== t.id_usuario_trab));
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || 'No se pudo eliminar el trabajador.');
+    }
   };
 
   const handleSave = async (form) => {
@@ -168,6 +181,16 @@ function Trabajadores() {
         </button>
       </div>
 
+      {confirmDelete && (
+        <div className={styles.confirmBanner}>
+          <span>¿Eliminar a <strong>{confirmDelete.nombre || confirmDelete.user_name}</strong>? Esta acción no se puede deshacer.</span>
+          <div className={styles.confirmBannerActions}>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.grid}>
         {trabajadores.map((t) => (
           <div key={t.id_usuario_trab ?? t.user_name ?? Math.random()} className={styles.card}>
@@ -183,16 +206,10 @@ function Trabajadores() {
                 {menuOpen === t.id_usuario_trab && (
                   <div className={styles.dropdown}>
                     <button onClick={() => openEdit(t)}>✏️ Editar</button>
-                    <button className={styles.dangerItem} onClick={async () => {
-                      if (!window.confirm(`¿Eliminar a "${t.nombre || t.user_name}"? Esta acción no se puede deshacer.`)) return;
-                      setMenuOpen(null);
-                      try {
-                        await api.delete(`/trabajadores/${t.id_usuario_trab}`);
-                        setTrabajadores((prev) => prev.filter((x) => x.id_usuario_trab !== t.id_usuario_trab));
-                      } catch {
-                        window.alert('No se pudo eliminar el trabajador. Intenta de nuevo.');
-                      }
-                    }}>🗑️ Eliminar</button>
+                    <button
+                      className={styles.dangerItem}
+                      onClick={() => { setConfirmDelete(t); setMenuOpen(null); }}
+                    >🗑️ Eliminar</button>
                   </div>
                 )}
               </div>

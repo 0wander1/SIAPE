@@ -101,3 +101,20 @@
 }
 .toggleInput:checked + .toggleSlider { background: #22c55e; }
 .toggleInput:checked + .toggleSlider::after { transform: translateX(18px); }
+
+.confirmBanner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 16px; background: #fff7ed; color: #c2410c;
+  border: 1px solid #fed7aa; border-radius: 8px; font-size: 13px;
+}
+.confirmBannerActions { display: flex; gap: 8px; flex-shrink: 0; }
+.confirmBannerCancel {
+  padding: 5px 14px; font-size: 13px; font-weight: 500;
+  border-radius: 6px; background: #fff; border: 1px solid #d1d5db; color: #374151;
+}
+.confirmBannerCancel:hover { background: #f9fafb; }
+.confirmBannerConfirm {
+  padding: 5px 14px; font-size: 13px; font-weight: 600;
+  border-radius: 6px; background: #dc2626; color: #fff;
+}
+.confirmBannerConfirm:hover { background: #b91c1c; }

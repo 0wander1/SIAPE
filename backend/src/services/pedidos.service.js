@@ -16,15 +16,17 @@ const CAMPOS_PERMITIDOS_UPDATE = [
 
 const SQL_SELECT = `
   SELECT
-    pe.id_pedido          AS id,
-    u.nombre_usuario      AS cliente,
-    p.nombre_producto     AS producto,
+    pe.id_pedido                AS id,
+    pe.cliente_id_usuario_cli   AS clienteId,
+    pe.producto_id_producto     AS productoId,
+    u.nombre_usuario            AS cliente,
+    p.nombre_producto           AS producto,
     pe.cantidad,
     pe.estado,
-    pe.valor_total        AS valorTotal,
-    pe.direccion_pedido   AS direccion,
-    pe.fecha_entrega_estimada AS fechaEstimada,
-    pe.fecha_entrega_real     AS fechaReal,
+    pe.valor_total              AS valorTotal,
+    pe.direccion_pedido         AS direccion,
+    pe.fecha_entrega_estimada   AS fechaEstimada,
+    pe.fecha_entrega_real       AS fechaReal,
     pe.observaciones
   FROM pedido_externo pe
   LEFT JOIN cliente    c ON pe.cliente_id_usuario_cli = c.id_usuario_cli
@@ -104,18 +106,21 @@ async function create(data) {
 }
 
 async function update(id, data) {
-  // Construye el SET dinámicamente solo con los campos enviados
   const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
 
   if (campos.length === 0) {
     throw Object.assign(new Error('No se proporcionaron campos válidos para actualizar.'), { status: 400 });
   }
 
-  const setClause = campos.map((c) => `${c} = ?`).join(', ');
+  const setClauses = campos.map((c) => `${c} = ?`);
   const valores = campos.map((c) => data[c]);
 
+  if (data.estado === 'entregado') {
+    setClauses.push('fecha_entrega_real = NOW()');
+  }
+
   const [result] = await pool.query(
-    `UPDATE pedido_externo SET ${setClause} WHERE id_pedido = ?`,
+    `UPDATE pedido_externo SET ${setClauses.join(', ')} WHERE id_pedido = ?`,
     [...valores, id]
   );
 
@@ -124,6 +129,17 @@ async function update(id, data) {
 }
 
 async function remove(id) {
+  const [[factura]] = await pool.query(
+    'SELECT id_factura FROM factura WHERE pedido_id_pedido = ? LIMIT 1',
+    [id]
+  );
+  if (factura) {
+    throw Object.assign(
+      new Error('No se puede eliminar el pedido porque tiene una factura asociada'),
+      { status: 409 }
+    );
+  }
+
   const [result] = await pool.query(
     'DELETE FROM pedido_externo WHERE id_pedido = ?',
     [id]

@@ -37,6 +37,24 @@ async function create(req, res, next) {
   }
 }
 
+async function update(req, res, next) {
+  try {
+    const { nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega } = req.body;
+    if (!nombre_producto || valor_neto == null || valor_de_venta == null || !bodega_id_bodega) {
+      return res.status(400).json({
+        message: 'Faltan campos requeridos: nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega.',
+      });
+    }
+    const actualizado = await productosService.update(req.params.id, req.body);
+    if (!actualizado) {
+      return res.status(404).json({ message: 'Producto no encontrado.' });
+    }
+    return res.status(200).json({ message: 'Producto actualizado exitosamente.', producto: actualizado });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function remove(req, res, next) {
   try {
     const eliminado = await productosService.remove(req.params.id);
@@ -52,4 +70,4 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, create, remove };
+module.exports = { getAll, getById, create, update, remove };
