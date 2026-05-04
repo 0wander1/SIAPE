@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Dashboard.module.css';
@@ -37,9 +38,9 @@ const estadoBadge = (estado) => {
   return map[estado] || styles.badgePending;
 };
 
-function MetricCard({ title, value, sub, icon, color }) {
+function MetricCard({ title, value, sub, icon, color, onClick }) {
   return (
-    <div className={styles.card}>
+    <div className={styles.card} onClick={onClick} style={{ cursor: 'pointer' }}>
       <div className={styles.cardIcon} style={{ backgroundColor: color + '20', color }}>
         {icon}
       </div>
@@ -110,6 +111,7 @@ function Dashboard() {
   }, []);
 
   const hoy = todayLocal();
+  const navigate = useNavigate();
 
   return (
     <div className={styles.page}>
@@ -120,6 +122,7 @@ function Dashboard() {
           sub='Mes actual — facturas emitidas'
           icon='💰'
           color='#16a34a'
+          onClick={() => navigate('/reportes')}
         />
         <MetricCard
           title='Productos Próximos a Vencer'
@@ -127,6 +130,7 @@ function Dashboard() {
           sub='En los próximos 10 días'
           icon='⚠️'
           color='#d97706'
+          onClick={() => navigate('/productos')}
         />
         <MetricCard
           title='Pedidos a Entregar Hoy'
@@ -134,6 +138,7 @@ function Dashboard() {
           sub={hoy}
           icon='📦'
           color='#2563eb'
+          onClick={() => navigate('/pedidos')}
         />
         <MetricCard
           title='Proveedores Activos'
@@ -141,6 +146,7 @@ function Dashboard() {
           sub='Con contrato vigente'
           icon='🏭'
           color='#7c3aed'
+          onClick={() => navigate('/proveedores')}
         />
       </div>
 
