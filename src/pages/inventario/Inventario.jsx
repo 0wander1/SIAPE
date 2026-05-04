@@ -152,7 +152,7 @@ function Inventario() {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const filas = XLSX.utils.sheet_to_json(ws);
+      const filas = XLSX.utils.sheet_to_json(ws, { cellDates: true });
 
       if (filas.length === 0) {
         setImportMsg({ type: 'error', text: 'El archivo no contiene filas de datos.' });

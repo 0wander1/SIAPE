@@ -101,11 +101,23 @@ async function cargaMasiva(filas) {
   try {
     for (let i = 0; i < filas.length; i++) {
       const fila = filas[i];
-      const nombre_producto   = fila.nombre_producto;
-      const bodega_id_bodega  = Number(fila.bodega_id_bodega);
+      const nombre_producto     = fila.nombre_producto;
+      const bodega_id_bodega    = Number(fila.bodega_id_bodega);
       const cantidad_disponible = Number(fila.cantidad_disponible) || 0;
       const cantidad_reservada  = Number(fila.cantidad_reservada)  || 0;
       const cantidad_minima     = Number(fila.cantidad_minima)     || 0;
+      const _valor_neto        = fila.valor_neto        ?? fila['valor_neto (opcional)'];
+      const _valor_de_venta    = fila.valor_de_venta    ?? fila['valor_de_venta (opcional)'];
+      const _lote              = fila.lote              ?? fila['lote (opcional)'];
+      const _fecha_vencimiento = fila.fecha_vencimiento ?? fila['fecha_vencimiento (opcional)'];
+      const valor_neto          = _valor_neto        != null ? Number(_valor_neto)       : 0;
+      const valor_de_venta      = _valor_de_venta    != null ? Number(_valor_de_venta)   : 0;
+      const lote                = _lote              != null ? String(_lote)             : null;
+      const fecha_vencimiento   = _fecha_vencimiento == null
+        ? null
+        : typeof _fecha_vencimiento === 'number'
+          ? new Date(Math.round((_fecha_vencimiento - 25569) * 86400 * 1000)).toISOString().split('T')[0]
+          : String(_fecha_vencimiento);
 
       if (!nombre_producto || !bodega_id_bodega) {
         errores.push(`Fila ${i + 2}: nombre_producto y bodega_id_bodega son requeridos.`);
@@ -128,8 +140,8 @@ async function cargaMasiva(filas) {
           const [prodResult] = await conn.query(
             `INSERT INTO producto
                (nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega)
-             VALUES (?, 0, 0, NULL, NULL, ?)`,
-            [nombre_producto, bodega_id_bodega]
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega]
           );
           producto_id_producto = prodResult.insertId;
         }
