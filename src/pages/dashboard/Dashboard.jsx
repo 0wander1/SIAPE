@@ -19,7 +19,8 @@ function firstOfMonthLocal() {
 }
 
 function diasHastaVencer(fechaStr) {
-  const vence = new Date(`${fechaStr}T00:00:00`);
+  const fechaSolo = fechaStr.split('T')[0];
+  const vence = new Date(`${fechaSolo}T00:00:00`);
   const hoy   = new Date(`${todayLocal()}T00:00:00`);
   return Math.ceil((vence - hoy) / MS_DIA);
 }
@@ -87,6 +88,8 @@ function Dashboard() {
             };
           })
           .sort((a, b) => a.diasRestantes - b.diasRestantes);
+        console.log('productos', prodRes.data);
+        console.log('diasRestantes', proximos);
         setProductosVencer(proximos);
       })
       .catch(() => {});
