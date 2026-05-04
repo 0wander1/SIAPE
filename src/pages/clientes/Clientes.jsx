@@ -100,8 +100,8 @@ function Clientes() {
           </thead>
           <tbody>
             {filtered.map((c) => (
-              <tr key={c.id}>
-                <td className={styles.mono}>{c.id}</td>
+              <tr key={c.id_usuario_cli}>
+                <td className={styles.mono}>{c.id_usuario_cli}</td>
                 <td className={styles.nombre}>{c.nombre_usuario}</td>
                 <td className={styles.correo}>{c.correo}</td>
               </tr>
