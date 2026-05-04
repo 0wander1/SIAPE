@@ -21,6 +21,16 @@ const PrivateRoute = ({ children }) => {
   return isAuthenticated() ? children : <Navigate to='/login' replace />;
 };
 
+const isAdmin = () => {
+  const raw = localStorage.getItem('siape_user');
+  const user = raw ? JSON.parse(raw) : null;
+  return user?.cargo === 'admin';
+};
+
+const AdminRoute = ({ children }) => {
+  return isAdmin() ? children : <Navigate to='/dashboard' replace />;
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -42,10 +52,10 @@ function App() {
           <Route path='proveedores' element={<Proveedores />} />
           <Route path='clientes' element={<Clientes />} />
           <Route path='bodegas' element={<Bodegas />} />
-          <Route path='trabajadores' element={<Trabajadores />} />
+          <Route path='trabajadores' element={<AdminRoute><Trabajadores /></AdminRoute>} />
           <Route path='facturas' element={<Facturas />} />
           <Route path='pagos' element={<Pagos />} />
-          <Route path='reportes' element={<Reportes />} />
+          <Route path='reportes' element={<AdminRoute><Reportes /></AdminRoute>} />
         </Route>
         <Route path='*' element={<Navigate to='/dashboard' replace />} />
       </Routes>

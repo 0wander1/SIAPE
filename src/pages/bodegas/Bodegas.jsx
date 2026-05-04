@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useRole from '../../hooks/useRole.js';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
@@ -97,6 +98,7 @@ function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit }) {
 }
 
 function Bodegas() {
+  const { isAdmin } = useRole();
   const [bodegas, setBodegas] = useState(mockBodegas);
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
   const [search, setSearch] = useState('');
@@ -260,21 +262,23 @@ function Bodegas() {
                   </span>
                 </td>
                 <td className={styles.menuCell}>
-                  <div className={styles.menuWrap}>
-                    <button
-                      className={styles.menuBtn}
-                      onClick={() => setMenuOpen(menuOpen === b.id_bodega ? null : b.id_bodega)}
-                    >⋮</button>
-                    {menuOpen === b.id_bodega && (
-                      <div className={styles.dropdown}>
-                        <button onClick={() => openEdit(b)}>✏️ Editar</button>
-                        <button
-                          className={styles.dangerItem}
-                          onClick={() => { setConfirmDelete(b); setMenuOpen(null); }}
-                        >🗑️ Eliminar</button>
-                      </div>
-                    )}
-                  </div>
+                  {isAdmin() && (
+                    <div className={styles.menuWrap}>
+                      <button
+                        className={styles.menuBtn}
+                        onClick={() => setMenuOpen(menuOpen === b.id_bodega ? null : b.id_bodega)}
+                      >⋮</button>
+                      {menuOpen === b.id_bodega && (
+                        <div className={styles.dropdown}>
+                          <button onClick={() => openEdit(b)}>✏️ Editar</button>
+                          <button
+                            className={styles.dangerItem}
+                            onClick={() => { setConfirmDelete(b); setMenuOpen(null); }}
+                          >🗑️ Eliminar</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

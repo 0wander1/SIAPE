@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import useRole from '../hooks/useRole.js';
 import styles from './Sidebar.module.css';
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
 
 function Sidebar() {
   const navigate = useNavigate();
+  const { isAdmin } = useRole();
 
   const handleLogout = () => {
     localStorage.removeItem('siape_token');
@@ -32,7 +34,7 @@ function Sidebar() {
       </div>
 
       <nav className={styles.nav}>
-        {navItems.map((item) => (
+        {navItems.filter((item) => isAdmin() || !['/trabajadores', '/reportes'].includes(item.path)).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

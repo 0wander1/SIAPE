@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useRole from '../../hooks/useRole.js';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
@@ -137,6 +138,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
 }
 
 function Facturas() {
+  const { isAdmin } = useRole();
   const [facturas, setFacturas] = useState(mockFacturas);
   const [pedidos, setPedidos] = useState(mockPedidos);
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
@@ -317,21 +319,23 @@ function Facturas() {
                 </td>
                 <td className={styles.mono}>{f.pedido_id_pedido}</td>
                 <td className={styles.menuCell}>
-                  <div className={styles.menuWrap}>
-                    <button
-                      className={styles.menuBtn}
-                      onClick={() => setMenuOpen(menuOpen === f.id_factura ? null : f.id_factura)}
-                    >⋮</button>
-                    {menuOpen === f.id_factura && (
-                      <div className={styles.dropdown}>
-                        <button onClick={() => openEdit(f)}>✏️ Editar</button>
-                        <button
-                          className={styles.dangerItem}
-                          onClick={() => { setConfirmDelete(f); setMenuOpen(null); }}
-                        >🗑️ Eliminar</button>
-                      </div>
-                    )}
-                  </div>
+                  {isAdmin() && (
+                    <div className={styles.menuWrap}>
+                      <button
+                        className={styles.menuBtn}
+                        onClick={() => setMenuOpen(menuOpen === f.id_factura ? null : f.id_factura)}
+                      >⋮</button>
+                      {menuOpen === f.id_factura && (
+                        <div className={styles.dropdown}>
+                          <button onClick={() => openEdit(f)}>✏️ Editar</button>
+                          <button
+                            className={styles.dangerItem}
+                            onClick={() => { setConfirmDelete(f); setMenuOpen(null); }}
+                          >🗑️ Eliminar</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

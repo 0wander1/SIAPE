@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useRole from '../../hooks/useRole.js';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
@@ -136,6 +137,7 @@ function PagoModal({ onClose, onSave, facturas, pagos }) {
 }
 
 function Pagos() {
+  const { isAdmin } = useRole();
   const [pagos, setPagos] = useState([]);
   const [facturas, setFacturas] = useState([]);
   const [trabajadores, setTrabajadores] = useState([]);
@@ -274,20 +276,22 @@ function Pagos() {
                 <td className={styles.mono}>{p.referencia_transaccion ?? '—'}</td>
                 <td className={styles.mono}>{p.usuario_trab_id_usuario_trab ?? '—'}</td>
                 <td className={styles.menuCell}>
-                  <div className={styles.menuWrap}>
-                    <button
-                      className={styles.menuBtn}
-                      onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === p.id_pago ? null : p.id_pago); }}
-                    >⋮</button>
-                    {menuOpen === p.id_pago && (
-                      <div className={styles.dropdown}>
-                        <button
-                          className={styles.dangerItem}
-                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
-                        >🗑️ Eliminar</button>
-                      </div>
-                    )}
-                  </div>
+                  {isAdmin() && (
+                    <div className={styles.menuWrap}>
+                      <button
+                        className={styles.menuBtn}
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === p.id_pago ? null : p.id_pago); }}
+                      >⋮</button>
+                      {menuOpen === p.id_pago && (
+                        <div className={styles.dropdown}>
+                          <button
+                            className={styles.dangerItem}
+                            onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                          >🗑️ Eliminar</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

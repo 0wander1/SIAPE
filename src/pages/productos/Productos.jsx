@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import useRole from '../../hooks/useRole.js';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
   Input, Select, FormRow, FormActions, BtnPrimary, BtnSecondary,
@@ -140,6 +141,7 @@ function ProductoModal({ onClose, onSave, bodegas, initialData }) {
 }
 
 function Productos() {
+  const { isAdmin } = useRole();
   const [productos, setProductos] = useState([]);
   const [bodegas, setBodegas] = useState([]);
   const [search, setSearch] = useState('');
@@ -314,23 +316,25 @@ function Productos() {
                   <span className={styles.bodegaBadge}>{bodegaLabel(p.bodega_id_bodega)}</span>
                 </td>
                 <td className={styles.menuCell}>
-                  <div className={styles.menuWrap}>
-                    <button
-                      className={styles.menuBtn}
-                      onClick={() => setMenuOpen(menuOpen === p.id_producto ? null : p.id_producto)}
-                    >
-                      ⋮
-                    </button>
-                    {menuOpen === p.id_producto && (
-                      <div className={styles.dropdown}>
-                        <button onClick={() => openEdit(p)}>✏️ Editar</button>
-                        <button
-                          className={styles.dangerItem}
-                          onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
-                        >🗑️ Eliminar</button>
-                      </div>
-                    )}
-                  </div>
+                  {isAdmin() && (
+                    <div className={styles.menuWrap}>
+                      <button
+                        className={styles.menuBtn}
+                        onClick={() => setMenuOpen(menuOpen === p.id_producto ? null : p.id_producto)}
+                      >
+                        ⋮
+                      </button>
+                      {menuOpen === p.id_producto && (
+                        <div className={styles.dropdown}>
+                          <button onClick={() => openEdit(p)}>✏️ Editar</button>
+                          <button
+                            className={styles.dangerItem}
+                            onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                          >🗑️ Eliminar</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
