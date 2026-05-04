@@ -130,9 +130,6 @@ function Login() {
             </button>
           </form>
 
-          <p className={styles.hint}>
-            Demo: <strong>admin</strong> / <strong>123456</strong>
-          </p>
         </div>
       </div>
     </div>

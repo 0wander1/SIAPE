@@ -20,6 +20,8 @@ const estadoClass = (estado) => {
   return map[estado] || styles.badgeDraft;
 };
 
+const itemVacio = () => ({ _key: Date.now() + Math.random(), producto_id: '', cantidad: '', busqueda: '' });
+
 function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initialData, pedidoError }) {
   const [form, setForm] = useState(initialData ?? {
     numeroFactura: `F-2026-${String(nextNum).padStart(3, '0')}`,
@@ -32,19 +34,45 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
     estado: 'emitida',
     trabajador: '',
   });
+  const [productos, setProductos] = useState([]);
+  const [items, setItems] = useState([itemVacio()]);
+
+  useEffect(() => {
+    api.get('/productos')
+      .then(({ data }) => setProductos(data ?? []))
+      .catch(() => {});
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm({ ...form, [name]: value });
   };
 
-  const subtotal = Number(form.subtotal) || 0;
-  const impuestoAmt = Math.round(subtotal * (Number(form.impuesto) / 100));
-  const total = subtotal + impuestoAmt - Number(form.descuento || 0);
+  const addItem = () => setItems((prev) => [...prev, itemVacio()]);
+  const removeItem = (key) => setItems((prev) => prev.filter((i) => i._key !== key));
+  const updateItem = (key, field, value) =>
+    setItems((prev) => prev.map((i) => (i._key === key ? { ...i, [field]: value } : i)));
+
+  const subtotalItems = items.reduce((acc, item) => {
+    const prod = productos.find((p) => String(p.id_producto) === String(item.producto_id));
+    return acc + (Number(prod?.valor_de_venta) || 0) * (Number(item.cantidad) || 0);
+  }, 0);
+
+  const subtotalBase = form.idPedido ? Number(form.subtotal) || 0 : subtotalItems;
+  const impuestoAmt  = Math.round(subtotalBase * (Number(form.impuesto) / 100));
+  const total        = subtotalBase + impuestoAmt - Number(form.descuento || 0);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ ...form, impuesto: impuestoAmt, total });
+    const itemsPayload = items.map((item) => {
+      const prod = productos.find((p) => String(p.id_producto) === String(item.producto_id));
+      return {
+        producto_id_producto: Number(item.producto_id),
+        cantidad:             Number(item.cantidad),
+        valor_unitario:       Number(prod?.valor_de_venta) || 0,
+      };
+    });
+    onSave({ ...form, subtotal: subtotalBase, impuesto: impuestoAmt, total, productosItems: itemsPayload });
   };
 
   const isEdit = !!initialData;
@@ -74,6 +102,73 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
           </FormField>
         </FormRow>
 
+        {!form.idPedido && (
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#374151' }}>Productos</p>
+            {items.map((item, idx) => {
+              const prodSeleccionado  = productos.find((p) => String(p.id_producto) === String(item.producto_id));
+              const productosFiltrados = productos.filter((p) =>
+                p.nombre_producto.toLowerCase().includes(item.busqueda.toLowerCase())
+              );
+              const lineaTotal = (Number(prodSeleccionado?.valor_de_venta) || 0) * (Number(item.cantidad) || 0);
+              return (
+                <div key={item._key} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px auto auto', gap: 8, alignItems: 'end', marginBottom: 10 }}>
+                  <FormField label={idx === 0 ? 'Buscar producto' : undefined}>
+                    <Input
+                      value={item.busqueda}
+                      onChange={(e) => updateItem(item._key, 'busqueda', e.target.value)}
+                      placeholder='Buscar...'
+                    />
+                  </FormField>
+                  <FormField label={idx === 0 ? 'Producto' : undefined}>
+                    <Select
+                      value={item.producto_id}
+                      onChange={(e) => updateItem(item._key, 'producto_id', e.target.value)}
+                      required
+                    >
+                      <option value=''>Seleccionar...</option>
+                      {productosFiltrados.map((p) => (
+                        <option key={p.id_producto} value={p.id_producto}>
+                          {p.nombre_producto}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField label={idx === 0 ? 'Cant.' : undefined}>
+                    <Input
+                      type='number'
+                      min='1'
+                      value={item.cantidad}
+                      onChange={(e) => updateItem(item._key, 'cantidad', e.target.value)}
+                      placeholder='0'
+                      required
+                    />
+                  </FormField>
+                  <div style={{ fontSize: 13, color: '#6b7280', whiteSpace: 'nowrap', alignSelf: 'center', paddingBottom: 2 }}>
+                    {formatCOP(lineaTotal)}
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => removeItem(item._key)}
+                    disabled={items.length === 1}
+                    style={{
+                      background: 'none', border: 'none', padding: '0 4px',
+                      fontSize: 20, lineHeight: 1, alignSelf: 'center',
+                      cursor: items.length === 1 ? 'default' : 'pointer',
+                      color: items.length === 1 ? '#d1d5db' : '#ef4444',
+                    }}
+                  >×</button>
+                </div>
+              );
+            })}
+            <button
+              type='button'
+              onClick={addItem}
+              style={{ fontSize: 13, color: '#2563eb', background: 'none', border: '1px dashed #93c5fd', borderRadius: 6, padding: '6px 14px', cursor: 'pointer' }}
+            >+ Agregar Producto</button>
+          </div>
+        )}
+
         <FormRow>
           <FormField label='Fecha de Emisión' required>
             <Input type='date' name='fechaEmision' value={form.fechaEmision}
@@ -87,8 +182,10 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
 
         <FormRow>
           <FormField label='Subtotal (COP)' required>
-            <Input type='number' name='subtotal' min='0' value={form.subtotal}
-              onChange={handleChange} placeholder='0' required />
+            {form.idPedido
+              ? <Input type='number' name='subtotal' min='0' value={form.subtotal} onChange={handleChange} placeholder='0' required />
+              : <Input value={formatCOP(subtotalItems)} disabled />
+            }
           </FormField>
           <FormField label='Impuesto (%)'>
             <Input type='number' name='impuesto' min='0' max='100'
@@ -224,6 +321,9 @@ function Facturas() {
       estado:            form.estado,
       usuario_trab_id:   usuarioTrabId,
       pedido_id_pedido:  form.idPedido ? Number(form.idPedido) : null,
+      ...(!form.idPedido && {
+        productos: form.productosItems,
+      }),
     };
     setPedidoError('');
     try {
