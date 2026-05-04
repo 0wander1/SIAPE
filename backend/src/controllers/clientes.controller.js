@@ -59,6 +59,9 @@ async function remove(req, res, next) {
     }
     return res.status(200).json({ message: 'Cliente eliminado exitosamente.' });
   } catch (error) {
+    if (error.status === 409) {
+      return res.status(409).json({ message: error.message });
+    }
     next(error);
   }
 }

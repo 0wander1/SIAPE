@@ -46,6 +46,9 @@ async function update(req, res, next) {
     }
     return res.status(200).json({ message: 'Trabajador actualizado exitosamente.', trabajador: actualizado });
   } catch (error) {
+    if (error.status === 401) {
+      return res.status(401).json({ message: error.message });
+    }
     next(error);
   }
 }

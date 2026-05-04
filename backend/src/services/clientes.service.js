@@ -46,33 +46,69 @@ async function create(data) {
 }
 
 async function update(id, data) {
-  const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
+  const { nombre_usuario, correo } = data;
 
-  if (campos.length === 0) {
+  if (nombre_usuario === undefined && correo === undefined) {
     throw Object.assign(
       new Error('No se proporcionaron campos válidos para actualizar.'),
       { status: 400 }
     );
   }
 
-  const setClause = campos.map((c) => `${c} = ?`).join(', ');
-  const valores = campos.map((c) => data[c]);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  const [result] = await pool.query(
-    `UPDATE cliente SET ${setClause} WHERE id_usuario_cli = ?`,
-    [...valores, id]
-  );
+    if (nombre_usuario !== undefined) {
+      await conn.query(
+        'UPDATE usuario SET nombre_usuario = ? WHERE id_usuario = ?',
+        [nombre_usuario, id]
+      );
+    }
 
-  if (result.affectedRows === 0) return null;
-  return getById(id);
+    if (correo !== undefined) {
+      await conn.query(
+        'UPDATE cliente SET correo = ? WHERE id_usuario_cli = ?',
+        [correo, id]
+      );
+    }
+
+    await conn.commit();
+    return getById(id);
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function remove(id) {
-  const [result] = await pool.query(
-    'DELETE FROM cliente WHERE id_usuario_cli = ?',
+  const [[{ count }]] = await pool.query(
+    'SELECT COUNT(*) AS count FROM pedido_externo WHERE cliente_id_usuario_cli = ?',
     [id]
   );
-  return result.affectedRows > 0;
+
+  if (count > 0) {
+    throw Object.assign(
+      new Error('No se puede eliminar el cliente porque tiene pedidos asociados'),
+      { status: 409 }
+    );
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM cliente WHERE id_usuario_cli = ?', [id]);
+    const [result] = await conn.query('DELETE FROM usuario WHERE id_usuario = ?', [id]);
+    await conn.commit();
+    return result.affectedRows > 0;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 module.exports = { getAll, getById, create, update, remove };

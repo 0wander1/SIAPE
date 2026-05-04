@@ -55,6 +55,36 @@ async function create(data) {
 }
 
 async function update(id, data) {
+  const { contrasena_actual, nueva_contrasena } = data;
+
+  if (contrasena_actual !== undefined && nueva_contrasena !== undefined) {
+    const [[row]] = await pool.query(
+      'SELECT password_hash FROM usuario_trab WHERE id_usuario_trab = ?',
+      [id]
+    );
+
+    if (!row) return null;
+
+    const matches = await bcrypt.compare(contrasena_actual, row.password_hash);
+    if (!matches) {
+      throw Object.assign(
+        new Error('La contraseña actual es incorrecta'),
+        { status: 401 }
+      );
+    }
+
+    const salt        = await bcrypt.genSalt(10);
+    const newHash     = await bcrypt.hash(nueva_contrasena, salt);
+
+    const [result] = await pool.query(
+      'UPDATE usuario_trab SET password_hash = ?, salt = ? WHERE id_usuario_trab = ?',
+      [newHash, salt, id]
+    );
+
+    if (result.affectedRows === 0) return null;
+    return getById(id);
+  }
+
   const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
 
   if (campos.length === 0) {
@@ -65,7 +95,7 @@ async function update(id, data) {
   }
 
   const setClause = campos.map((c) => `${c} = ?`).join(', ');
-  const valores = campos.map((c) => data[c]);
+  const valores   = campos.map((c) => data[c]);
 
   const [result] = await pool.query(
     `UPDATE usuario_trab SET ${setClause} WHERE id_usuario_trab = ?`,
