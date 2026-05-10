@@ -19,6 +19,57 @@ const metodoBadge = (metodo) => {
   return map[metodo] || styles.badgeTransfer;
 };
 
+function ValidarPagoModal({ modal, onClose }) {
+  const { loading, error, data, facturaId } = modal;
+
+  return (
+    <Modal title={`Validación de Pago — Factura #${facturaId}`} onClose={onClose} size='md'>
+      {loading && (
+        <p className={styles.validLoading}>Consultando servidor Java (Tomcat)...</p>
+      )}
+      {error && (
+        <div className={styles.validError}>{error}</div>
+      )}
+      {data && (
+        <div className={styles.validGrid}>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Número de Factura</p>
+            <p className={styles.validValue}>{data.numero_factura ?? data.numeroFactura ?? `#${facturaId}`}</p>
+          </div>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Estado</p>
+            <span className={`${styles.estadoBadge} ${styles[`estado_${(data.estado ?? '').toLowerCase()}`]}`}>
+              {data.estado ?? '—'}
+            </span>
+          </div>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Total Factura</p>
+            <p className={styles.validValue}>{formatCOP(data.total ?? data.totalFactura ?? 0)}</p>
+          </div>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Total Pagado</p>
+            <p className={styles.validValue}>{formatCOP(data.total_pagado ?? data.totalPagado ?? 0)}</p>
+          </div>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Saldo Pendiente</p>
+            <p className={`${styles.validValue} ${Number(data.saldo_pendiente ?? data.saldoPendiente ?? 0) > 0 ? styles.saldoNeg : styles.saldoOk}`}>
+              {formatCOP(data.saldo_pendiente ?? data.saldoPendiente ?? 0)}
+            </p>
+          </div>
+          <div className={styles.validItem}>
+            <p className={styles.validLabel}>Completamente Pagada</p>
+            {(data.completamente_pagada ?? data.completamentePagada) ? (
+              <span className={styles.paidYes}>✓ Sí</span>
+            ) : (
+              <span className={styles.paidNo}>✗ No</span>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function PagoModal({ onClose, onSave, facturas, pagos }) {
   const [form, setForm] = useState({
     idFactura: '', monto: '', fecha: '', metodo: 'transferencia', referencia: '',
@@ -146,6 +197,7 @@ function Pagos() {
   const [showModal, setShowModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [validacionModal, setValidacionModal] = useState(null);
 
   useEffect(() => {
     const handleClickOutside = () => setMenuOpen(null);
@@ -174,6 +226,22 @@ function Pagos() {
     const matchMetodo = !filtroMetodo || p.metodo_pago === filtroMetodo;
     return matchSearch && matchMetodo;
   });
+
+  const handleValidarJava = async (facturaId) => {
+    setValidacionModal({ facturaId, loading: true });
+    try {
+      const res = await fetch(`http://localhost:8080/SIAPE-Servlets/ValidacionPagoServlet?id_factura=${facturaId}`);
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status} ${res.statusText}`);
+      const data = await res.json();
+      setValidacionModal({ facturaId, data });
+    } catch (err) {
+      if (err instanceof TypeError) {
+        setValidacionModal({ facturaId, error: 'No se pudo conectar con el servidor Java (Tomcat). Verifique que esté en ejecución en el puerto 8080.' });
+      } else {
+        setValidacionModal({ facturaId, error: err.message || 'Error al validar el pago.' });
+      }
+    }
+  };
 
   const handleConfirmDelete = async () => {
     const p = confirmDelete;
@@ -259,6 +327,7 @@ function Pagos() {
               <th>Referencia</th>
               <th>Registrado por</th>
               <th></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -275,6 +344,14 @@ function Pagos() {
                 </td>
                 <td className={styles.mono}>{p.referencia_transaccion ?? '—'}</td>
                 <td className={styles.mono}>{p.usuario_trab_id_usuario_trab ?? '—'}</td>
+                <td>
+                  <button
+                    className={styles.btnValidar}
+                    onClick={() => handleValidarJava(p.factura_id_factura)}
+                  >
+                    ☕ Validar
+                  </button>
+                </td>
                 <td className={styles.menuCell}>
                   {isAdmin() && (
                     <div className={styles.menuWrap}>
@@ -308,6 +385,13 @@ function Pagos() {
           onSave={handleSave}
           facturas={facturas}
           pagos={pagos}
+        />
+      )}
+
+      {validacionModal && (
+        <ValidarPagoModal
+          modal={validacionModal}
+          onClose={() => setValidacionModal(null)}
         />
       )}
     </div>

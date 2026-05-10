@@ -82,6 +82,54 @@ function InventarioModal({ item, bodegas, onClose, onSave }) {
   );
 }
 
+function StockCriticoModal({ data, loading, error, onClose }) {
+  return (
+    <Modal title='Stock Crítico (Java)' onClose={onClose} size='lg'>
+      {loading && (
+        <p className={styles.stockLoading}>Consultando servidor Java (Tomcat)...</p>
+      )}
+      {error && (
+        <div className={styles.stockError}>{error}</div>
+      )}
+      {!loading && !error && data.length === 0 && (
+        <p className={styles.stockEmpty}>No hay productos con stock crítico.</p>
+      )}
+      {!loading && !error && data.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table className={styles.stockTable}>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Disponible</th>
+                <th>Mínimo</th>
+                <th>Déficit</th>
+                <th>Bodega</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, i) => (
+                <tr key={i}>
+                  <td className={styles.productName}>{item.producto ?? item.nombre_producto ?? '—'}</td>
+                  <td>{item.disponible ?? item.cantidad_disponible ?? '—'}</td>
+                  <td>{item.minimo ?? item.cantidad_minima ?? '—'}</td>
+                  <td>
+                    <span className={styles.deficitBadge}>
+                      {item.deficit ?? item.deficit ?? '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={styles.bodegaBadge}>{item.bodega ?? item.descripcion_bodega ?? '—'}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function Inventario() {
   const { isAdmin } = useRole();
   const [items, setItems] = useState([]);
@@ -92,6 +140,10 @@ function Inventario() {
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [stockCriticoOpen, setStockCriticoOpen] = useState(false);
+  const [stockCriticoData, setStockCriticoData] = useState([]);
+  const [stockCriticoError, setStockCriticoError] = useState(null);
+  const [stockCriticoLoading, setStockCriticoLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -140,6 +192,27 @@ function Inventario() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
     XLSX.writeFile(wb, nombreArchivo);
+  };
+
+  const handleStockCritico = async () => {
+    setStockCriticoOpen(true);
+    setStockCriticoLoading(true);
+    setStockCriticoError(null);
+    setStockCriticoData([]);
+    try {
+      const res = await fetch('http://localhost:8080/SIAPE-Servlets/StockCriticoServlet');
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status} ${res.statusText}`);
+      const data = await res.json();
+      setStockCriticoData(Array.isArray(data) ? data : []);
+    } catch (err) {
+      if (err instanceof TypeError) {
+        setStockCriticoError('No se pudo conectar con el servidor Java (Tomcat). Verifique que esté en ejecución en el puerto 8080.');
+      } else {
+        setStockCriticoError(err.message || 'Error al consultar el stock crítico.');
+      }
+    } finally {
+      setStockCriticoLoading(false);
+    }
   };
 
   const handleImport = async (e) => {
@@ -249,6 +322,13 @@ function Inventario() {
           >
             {importando ? 'Importando...' : '📂 Cargar Excel'}
           </button>
+          <button
+            className={styles.btnJava}
+            onClick={handleStockCritico}
+            disabled={stockCriticoLoading}
+          >
+            {stockCriticoLoading ? 'Consultando...' : '☕ Stock Crítico (Java)'}
+          </button>
         </div>
       </div>
 
@@ -335,6 +415,15 @@ function Inventario() {
           bodegas={bodegas}
           onClose={() => setEditando(null)}
           onSave={handleUpdate}
+        />
+      )}
+
+      {stockCriticoOpen && (
+        <StockCriticoModal
+          data={stockCriticoData}
+          loading={stockCriticoLoading}
+          error={stockCriticoError}
+          onClose={() => setStockCriticoOpen(false)}
         />
       )}
     </div>

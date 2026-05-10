@@ -243,3 +243,79 @@
   border-radius: 6px; background: #dc2626; color: #fff;
 }
 .confirmBannerConfirm:hover { background: #b91c1c; }
+
+.btnJava {
+  padding: 9px 16px;
+  background: #f97316;
+  border: 1.5px solid #ea580c;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  transition: background-color 0.15s;
+}
+
+.btnJava:hover { background: #ea580c; }
+.btnJava:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.stockTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.stockTable th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+  white-space: nowrap;
+}
+
+.stockTable td {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #374151;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.stockTable tr:last-child td { border-bottom: none; }
+.stockTable tr:hover td { background: #f8fafc; }
+
+.stockError {
+  padding: 14px 16px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.stockLoading {
+  text-align: center;
+  padding: 28px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.stockEmpty {
+  text-align: center;
+  padding: 28px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.deficitBadge {
+  display: inline-flex;
+  padding: 3px 10px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}

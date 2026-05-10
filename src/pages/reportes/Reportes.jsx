@@ -31,6 +31,38 @@ function Reportes() {
   const [ventas, setVentas]           = useState(null);
   const [stockCritico, setStockCritico] = useState([]);
 
+  const [javaFechaInicio, setJavaFechaInicio] = useState('');
+  const [javaFechaFin, setJavaFechaFin]       = useState('');
+  const [javaLoading, setJavaLoading]         = useState(false);
+  const [javaError, setJavaError]             = useState('');
+  const [javaResult, setJavaResult]           = useState(null);
+
+  const handleConsultarJava = async (e) => {
+    e.preventDefault();
+    setJavaLoading(true);
+    setJavaError('');
+    setJavaResult(null);
+    try {
+      const url = `http://localhost:8080/SIAPE-Servlets/ResumenVentasServlet?fecha_inicio=${javaFechaInicio}&fecha_fin=${javaFechaFin}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status} ${res.statusText}`);
+      const data = await res.json();
+      setJavaResult({
+        totalFacturas:      Number(data.total_facturas     ?? data.totalFacturas     ?? 0),
+        ingresosTotales:    Number(data.ingresos_totales   ?? data.ingresosTotales   ?? 0),
+        promedioPorFactura: Math.round(Number(data.promedio_por_factura ?? data.promedioPorFactura ?? 0)),
+      });
+    } catch (err) {
+      if (err instanceof TypeError) {
+        setJavaError('No se pudo conectar con el servidor Java (Tomcat). Verifique que esté en ejecución en el puerto 8080.');
+      } else {
+        setJavaError(err.message || 'Error al consultar el resumen de ventas.');
+      }
+    } finally {
+      setJavaLoading(false);
+    }
+  };
+
   const handleGenerar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -183,6 +215,55 @@ function Reportes() {
           )}
         </div>
       )}
+
+      {/* ── Resumen de Ventas (Java) ── */}
+      <div className={styles.reportCard}>
+        <div className={styles.reportHeader}>
+          <h3 className={styles.reportTitle}>☕ Resumen de Ventas (Java)</h3>
+        </div>
+
+        <form className={styles.dateRow} onSubmit={handleConsultarJava}>
+          <div className={styles.dateField}>
+            <label className={styles.dateLabel}>Fecha inicio</label>
+            <input
+              type='date' className={styles.dateInput} required
+              value={javaFechaInicio} onChange={(e) => setJavaFechaInicio(e.target.value)}
+            />
+          </div>
+          <div className={styles.dateField}>
+            <label className={styles.dateLabel}>Fecha fin</label>
+            <input
+              type='date' className={styles.dateInput} required
+              value={javaFechaFin} onChange={(e) => setJavaFechaFin(e.target.value)}
+            />
+          </div>
+          <button type='submit' className={styles.btnConsultar} disabled={javaLoading}>
+            {javaLoading ? 'Consultando...' : 'Consultar'}
+          </button>
+        </form>
+
+        {javaError && <p className={styles.errorBanner}>{javaError}</p>}
+
+        {javaResult && (
+          <div className={styles.metrics}>
+            <div className={styles.metricCard}>
+              <p className={styles.metricLabel}>Total Facturas</p>
+              <p className={styles.metricValue}>{javaResult.totalFacturas}</p>
+              <p className={styles.metricSub}>En el periodo seleccionado</p>
+            </div>
+            <div className={styles.metricCard}>
+              <p className={styles.metricLabel}>Ingresos Totales</p>
+              <p className={styles.metricValue}>{formatCOP(javaResult.ingresosTotales)}</p>
+              <p className={styles.metricSub}>Suma de totales facturados</p>
+            </div>
+            <div className={styles.metricCard}>
+              <p className={styles.metricLabel}>Promedio por Factura</p>
+              <p className={styles.metricValue}>{formatCOP(javaResult.promedioPorFactura)}</p>
+              <p className={styles.metricSub}>Valor promedio por factura</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
