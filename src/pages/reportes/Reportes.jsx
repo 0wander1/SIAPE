@@ -1,3 +1,14 @@
+// Página de reportes y métricas del negocio.
+// Acceso exclusivo para administradores: esta ruta está envuelta en <AdminRoute>
+// dentro de App.jsx, que verifica que user.cargo === 'admin' antes de renderizarla.
+// Por eso este componente no importa useRole ni aplica controles propios: la
+// protección ya ocurrió más arriba en el árbol de componentes.
+//
+// Contiene tres secciones independientes:
+//  1. Reporte de Ventas (Node backend): rango de fechas → tarjetas resumen + gráfico.
+//  2. Stock Crítico (Node backend): se carga junto con el reporte de ventas.
+//  3. Resumen de Ventas Java (Tomcat): rango de fechas → consulta al servlet.
+
 import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -6,12 +17,21 @@ import { formatCOP } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Reportes.module.css';
 
+// Formatea los valores del eje Y del gráfico de barras de forma compacta
+// para evitar que números grandes como 1 500 000 desborden el espacio disponible:
+// ≥ 1 000 000 → "$1.5M", ≥ 1 000 → "$1.5K", de lo contrario el número entero.
 const formatYAxis = (value) => {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
   if (value >= 1000)    return `$${(value / 1000).toFixed(0)}K`;
   return `$${value}`;
 };
 
+// Tooltip personalizado que reemplaza al tooltip genérico de Recharts.
+// Recharts lo llama con { active, payload, label } cuando el usuario posiciona
+// el cursor sobre una barra. `active` es true mientras el cursor está encima;
+// `payload[0].value` contiene el valor numérico de la barra; `label` es el
+// valor del eje X (la fecha de inicio de semana en este caso).
+// Devuelve null cuando active es false para no renderizar nada fuera del hover.
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -23,20 +43,37 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 function Reportes() {
+  // ── Estado del Reporte de Ventas (Node) ───────────────────────────────────
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin]       = useState('');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
+  // `generated` controla si las secciones de resultados (métricas + gráfico +
+  // stock crítico) deben mostrarse. Permanece false hasta el primer "Generar".
   const [generated, setGenerated]     = useState(false);
+  // `ventas` almacena el resumen y los datos por semana del backend Node.
   const [ventas, setVentas]           = useState(null);
+  // `stockCritico` almacena los productos con stock por debajo del mínimo.
   const [stockCritico, setStockCritico] = useState([]);
 
+  // ── Estado del Resumen de Ventas Java ─────────────────────────────────────
+  // Cada sección tiene su propio juego de estados de carga/error/resultado para
+  // que sean completamente independientes entre sí.
   const [javaFechaInicio, setJavaFechaInicio] = useState('');
   const [javaFechaFin, setJavaFechaFin]       = useState('');
   const [javaLoading, setJavaLoading]         = useState(false);
   const [javaError, setJavaError]             = useState('');
   const [javaResult, setJavaResult]           = useState(null);
 
+  // ── Resumen de Ventas Java: consulta al servlet ────────────────────────────
+  // Usa fetch nativo (no axios) porque el servlet corre en Tomcat :8080,
+  // fuera del backend Node que gestiona el interceptor de axios.
+  // Los parámetros de fecha se envían como query strings.
+  // Los nombres de los campos se leen con fallback (data.total_facturas ??
+  // data.totalFacturas) porque el servlet puede devolver snake_case o camelCase
+  // según la versión. Math.round elimina decimales del promedio.
+  // - TypeError indica que Tomcat no está en ejecución o hay un error de red.
+  // - Otro error proviene de una respuesta HTTP no-ok del servlet.
   const handleConsultarJava = async (e) => {
     e.preventDefault();
     setJavaLoading(true);
@@ -63,6 +100,21 @@ function Reportes() {
     }
   };
 
+  // ── Reporte de Ventas + Stock Crítico (Node) ──────────────────────────────
+  // Lanza dos peticiones en paralelo con Promise.all para minimizar el tiempo
+  // de espera total (max(t_ventas, t_inventario) en lugar de su suma).
+  //
+  // /reportes/ventas recibe el rango de fechas como query params y devuelve:
+  //   - resumen: { total_facturas, ingresos_totales, promedio_por_factura }
+  //   - por_semana: [{ inicio_semana, ingresos }] → datos del gráfico de barras
+  //
+  // /reportes/inventario devuelve los productos con cantidad_disponible menor
+  // que cantidad_minima, que se muestran en la tabla de stock crítico.
+  //
+  // Los valores numéricos se convierten explícitamente con Number() porque el
+  // backend puede devolverlos como strings según el driver de MySQL.
+  // Math.round elimina centavos del promedio para que la tarjeta sea legible.
+  // `setGenerated(true)` hace que las secciones de resultados se monten en el DOM.
   const handleGenerar = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -78,6 +130,8 @@ function Reportes() {
         totalPedidos:    Number(v.resumen.total_facturas),
         ingresosTotales: Number(v.resumen.ingresos_totales),
         promedioPedido:  Math.round(Number(v.resumen.promedio_por_factura)),
+        // Mapea por_semana al shape { semana, ventas } que consume el BarChart.
+        // `semana` va al eje X y `ventas` es el valor de cada barra.
         porSemana: (v.por_semana ?? []).map((s) => ({
           semana: s.inicio_semana,
           ventas: Number(s.ingresos),
@@ -99,7 +153,13 @@ function Reportes() {
         <p className={styles.subtitle}>Análisis y métricas de rendimiento del negocio</p>
       </div>
 
-      {/* ── Reporte de Ventas ── */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECCIÓN 1: Reporte de Ventas (Node backend)
+          El formulario requiere ambas fechas (required); el botón se deshabilita
+          durante la carga para evitar solicitudes duplicadas.
+          Los resultados solo se renderizan después del primer "Generar" exitoso
+          (generated === true && ventas !== null).
+      ══════════════════════════════════════════════════════════════════════ */}
       <div className={styles.reportCard}>
         <div className={styles.reportHeader}>
           <h3 className={styles.reportTitle}>📈 Reporte de Ventas</h3>
@@ -129,6 +189,7 @@ function Reportes() {
 
         {generated && ventas && (
           <>
+            {/* Tarjetas de resumen: tres métricas clave del periodo */}
             <div className={styles.metrics}>
               <div className={styles.metricCard}>
                 <p className={styles.metricLabel}>Total Facturas</p>
@@ -147,6 +208,31 @@ function Reportes() {
               </div>
             </div>
 
+            {/*
+              Gráfico de barras con Recharts: ingresos agrupados por semana.
+
+              ResponsiveContainer hace que el gráfico ocupe el 100 % del ancho
+              del contenedor padre y respete la altura fija de 280 px,
+              adaptándose automáticamente a cambios de tamaño de ventana.
+
+              BarChart recibe `data` como el array ventas.porSemana con shape
+              [{ semana: 'YYYY-MM-DD', ventas: number }].
+
+              Ejes:
+              - XAxis con dataKey='semana': muestra las fechas de inicio de semana.
+                axisLine y tickLine en false eliminan las líneas decorativas del eje.
+              - YAxis con tickFormatter=formatYAxis: usa el formateador compacto
+                para no mostrar números como 1500000 en el eje.
+
+              Tooltip: reemplazado por CustomTooltip para mostrar el valor
+              formateado en COP en lugar del número crudo de Recharts.
+              `cursor={{ fill: '#f0f9ff' }}` tiñe de azul claro el fondo de la
+              barra al hacer hover, proporcionando retroalimentación visual.
+
+              Bar: dataKey='ventas' conecta cada entrada del array con la altura
+              de su barra. `radius={[6, 6, 0, 0]}` redondea solo las esquinas
+              superiores para un aspecto más moderno.
+            */}
             <div className={styles.chartSection}>
               <h4 className={styles.chartTitle}>Ingresos por Semana</h4>
               {ventas.porSemana.length === 0 ? (
@@ -177,7 +263,16 @@ function Reportes() {
         )}
       </div>
 
-      {/* ── Stock Crítico ── */}
+      {/*
+        ══════════════════════════════════════════════════════════════════════
+        SECCIÓN 2: Stock Crítico (Node backend)
+        Se renderiza condicionalmente con `generated` para que aparezca al mismo
+        tiempo que el reporte de ventas, ya que ambos se generan con Promise.all.
+        El déficit se calcula en el cliente como cantidad_disponible − cantidad_minima;
+        un valor negativo indica cuántas unidades faltan para alcanzar el mínimo.
+        Tanto el disponible como el déficit se muestran en rojo para resaltar urgencia.
+        ══════════════════════════════════════════════════════════════════════
+      */}
       {generated && (
         <div className={styles.reportCard}>
           <div className={styles.reportHeaderRow}>
@@ -206,6 +301,8 @@ function Reportes() {
                       <td>{p.descripcion_bodega}</td>
                       <td style={{ color: '#dc2626', fontWeight: 700 }}>{p.cantidad_disponible}</td>
                       <td>{p.cantidad_minima}</td>
+                      {/* El déficit es negativo cuando disponible < mínimo, lo que
+                          confirma que el producto necesita reposición inmediata */}
                       <td style={{ color: '#dc2626' }}>{p.cantidad_disponible - p.cantidad_minima}</td>
                     </tr>
                   ))}
@@ -216,7 +313,18 @@ function Reportes() {
         </div>
       )}
 
-      {/* ── Resumen de Ventas (Java) ── */}
+      {/*
+        ══════════════════════════════════════════════════════════════════════
+        SECCIÓN 3: Resumen de Ventas Java (Tomcat servlet)
+        Sección completamente independiente de las anteriores: tiene su propio
+        formulario de fechas, estados de carga/error y área de resultados.
+        No usa axios sino fetch nativo porque el servlet corre en Tomcat :8080,
+        fuera del alcance del interceptor de axios configurado en api.js.
+        Los parámetros se pasan como query strings: ?fecha_inicio=...&fecha_fin=...
+        Los resultados se muestran como tarjetas idénticas a las del reporte Node,
+        facilitando la comparación entre ambas fuentes.
+        ══════════════════════════════════════════════════════════════════════
+      */}
       <div className={styles.reportCard}>
         <div className={styles.reportHeader}>
           <h3 className={styles.reportTitle}>☕ Resumen de Ventas (Java)</h3>
@@ -244,6 +352,8 @@ function Reportes() {
 
         {javaError && <p className={styles.errorBanner}>{javaError}</p>}
 
+        {/* Los resultados se montan solo cuando javaResult tiene datos,
+            lo que ocurre tras una consulta exitosa al servlet. */}
         {javaResult && (
           <div className={styles.metrics}>
             <div className={styles.metricCard}>

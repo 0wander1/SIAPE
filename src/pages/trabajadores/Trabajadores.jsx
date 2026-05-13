@@ -1,3 +1,13 @@
+// Página de gestión del equipo de trabajo. Muestra los trabajadores en vista
+// de tarjetas (grid) en lugar de tabla, ya que el número de empleados suele
+// ser reducido y el formato de tarjeta comunica mejor la identidad de cada persona.
+//
+// Acceso exclusivo para administradores: esta ruta está envuelta en <AdminRoute>
+// dentro de App.jsx, que verifica que user.cargo === 'admin' antes de renderizarla.
+// Si un usuario sin ese cargo intenta acceder directamente por URL, AdminRoute lo
+// redirige al dashboard. Por eso este componente no importa useRole ni aplica
+// ningún control de visibilidad propio: la protección ya ocurrió más arriba en el árbol.
+
 import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';
 import FormField, {
@@ -7,20 +17,46 @@ import { mockTrabajadores } from '../../utils/mockData.js';
 import api from '../../services/api.js';
 import styles from './Trabajadores.module.css';
 
+// Valores iniciales del formulario en modo creación.
+// `password` y `confirmPassword` siempre parten vacíos, también en edición,
+// para que el administrador no vea ni sobreescriba la contraseña actual
+// a menos que quiera cambiarla explícitamente.
 const emptyForm = {
   nombre: '', cargo: '', direccion: '', turno: 'Mañana',
   celular: '', username: '', password: '', confirmPassword: '',
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de creación / edición de trabajador
+// ─────────────────────────────────────────────────────────────────────────────
 function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
   const [form, setForm] = useState(initialData ?? emptyForm);
+  // `error` muestra mensajes de validación de contraseña dentro del modal.
   const [error, setError] = useState('');
 
+  // Limpia el error en cada pulsación para que no persista después de que
+  // el usuario empiece a corregir el campo que lo originó.
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError('');
   };
 
+  // Validación de contraseñas antes de delegar al padre.
+  // La lógica tiene dos ramas según el modo:
+  //
+  // Creación (!isEdit):
+  //   - La contraseña es obligatoria (el input tiene required={!isEdit}).
+  //   - Las dos contraseñas deben coincidir.
+  //
+  // Edición (isEdit) con nueva contraseña (form.password no vacío):
+  //   - Si el administrador escribe algo en el campo, se valida que coincida
+  //     con el campo de confirmación antes de enviarlo.
+  //   - Si ambos campos están vacíos, el payload omite `password` y el backend
+  //     conserva la contraseña actual sin cambios.
+  //
+  // El bloque `if (!isEdit || form.password)` cubre ambos casos:
+  //   - En creación siempre entra (isEdit es false → !isEdit es true).
+  //   - En edición entra solo si se escribió una nueva contraseña.
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!isEdit || form.password) {
@@ -76,6 +112,13 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
           </FormField>
         </FormRow>
 
+        {/*
+          Campos de contraseña con comportamiento diferente según el modo:
+          - Creación: obligatorios (required={!isEdit}), placeholder estándar.
+          - Edición:  opcionales, placeholder 'Dejar vacío para no cambiar'
+            para indicar al administrador que puede omitirlos si no desea
+            modificar la contraseña actual del trabajador.
+        */}
         <FormRow>
           <FormField label={isEdit ? 'Nueva Contraseña' : 'Contraseña'} required={!isEdit}>
             <Input type='password' name='password' value={form.password}
@@ -88,6 +131,7 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
           </FormField>
         </FormRow>
 
+        {/* Mensaje de error de validación de contraseñas; se limpia en cada cambio */}
         {error && <div className={styles.errorMsg}>{error}</div>}
 
         <FormActions>
@@ -99,26 +143,48 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Componente principal
+// ─────────────────────────────────────────────────────────────────────────────
 function Trabajadores() {
+  // Inicializado con mock data para que el grid no quede vacío mientras llega la API.
   const [trabajadores, setTrabajadores] = useState(mockTrabajadores);
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal]       = useState(false);
+
+  // `menuOpen` guarda el id_usuario_trab del menú ⋮ abierto en la tarjeta activa.
   const [menuOpen, setMenuOpen] = useState(null);
-  const [editando, setEditando] = useState(null);
+
+  // `editando` guarda el id_usuario_trab que se está editando (null en creación).
+  const [editando, setEditando]       = useState(null);
+  // `initialData` contiene los valores normalizados para pre-llenar el formulario.
   const [initialData, setInitialData] = useState(null);
+
+  // `confirmDelete` almacena el trabajador pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // ── Carga inicial de trabajadores ─────────────────────────────────────────
+  // Reemplaza los datos mock con los reales del servidor al montar.
+  // El catch vacío preserva los mock si el backend no está disponible.
   useEffect(() => {
     api.get('/trabajadores')
       .then(({ data }) => setTrabajadores(data))
       .catch(() => {});
   }, []);
 
+  // Cierra el modal y limpia el estado de edición para que la próxima
+  // apertura arranque siempre en modo creación con formulario vacío.
   const closeModal = () => {
     setShowModal(false);
     setEditando(null);
     setInitialData(null);
   };
 
+  // Normaliza los campos del trabajador antes de pasarlos al formulario:
+  // - `password` y `confirmPassword` siempre vacíos en edición: el administrador
+  //   solo los rellena si quiere cambiar la contraseña; si los deja vacíos,
+  //   handleSave omitirá `password` del payload y el backend no la modificará.
+  // - `user_name` del backend se mapea a `username` del formulario para consistencia
+  //   con el campo `name` del input.
   const openEdit = (t) => {
     setInitialData({
       nombre:          t.nombre ?? '',
@@ -135,6 +201,12 @@ function Trabajadores() {
     setShowModal(true);
   };
 
+  // ── Eliminación con confirmación ──────────────────────────────────────────
+  // Se invoca solo cuando el usuario confirma en el banner.
+  // 1. Cierra el banner de inmediato para evitar doble clic.
+  // 2. Envía DELETE /trabajadores/:id.
+  // 3. Si tiene éxito, filtra el trabajador del estado local sin recargar.
+  // 4. Si falla, muestra el mensaje del backend en un alert nativo.
   const handleConfirmDelete = async () => {
     const t = confirmDelete;
     setConfirmDelete(null);
@@ -147,7 +219,11 @@ function Trabajadores() {
     }
   };
 
+  // ── Guardar trabajador (crear o editar) ───────────────────────────────────
   const handleSave = async (form) => {
+    // Campos comunes a creación y edición.
+    // Los opcionales se convierten a null si están vacíos para que el backend
+    // los trate como ausentes y no los guarde como strings vacíos.
     const base = {
       cargo:     form.cargo,
       direccion: form.direccion || null,
@@ -157,13 +233,19 @@ function Trabajadores() {
     };
     try {
       if (editando) {
+        // En edición, `password` solo se incluye en el payload si el administrador
+        // escribió una nueva contraseña. El spread condicional `...(form.password ? {...} : {})`
+        // omite la clave por completo cuando el campo está vacío, de modo que el backend
+        // no interpreta un password vacío como una instrucción de borrado.
         await api.put(`/trabajadores/${editando}`, {
           ...base,
           ...(form.password ? { password: form.password } : {}),
         });
       } else {
+        // En creación, `password` siempre se incluye (es obligatorio en el modal).
         await api.post('/trabajadores', { ...base, password: form.password });
       }
+      // Recarga la lista completa para mostrar los datos definitivos del servidor.
       const { data } = await api.get('/trabajadores');
       setTrabajadores(data);
       closeModal();
@@ -176,11 +258,15 @@ function Trabajadores() {
     <div className={styles.page}>
       <div className={styles.topBar}>
         <h2 className={styles.heading}>Equipo de Trabajo</h2>
+        {/* Resetea editando e initialData para garantizar modo creación */}
         <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
           + Agregar Trabajador
         </button>
       </div>
 
+      {/* ── Banner de confirmación de eliminación ────────────────────────────
+          El nombre mostrado usa `confirmDelete.nombre || confirmDelete.user_name`
+          porque algunos trabajadores mock solo tienen user_name sin nombre completo. */}
       {confirmDelete && (
         <div className={styles.confirmBanner}>
           <span>¿Eliminar a <strong>{confirmDelete.nombre || confirmDelete.user_name}</strong>? Esta acción no se puede deshacer.</span>
@@ -191,13 +277,35 @@ function Trabajadores() {
         </div>
       )}
 
+      {/*
+        Vista en tarjetas (grid).
+        Cada tarjeta muestra el avatar con la inicial del nombre, el cargo, el turno
+        y el celular (solo si está disponible). Este layout es preferible a una tabla
+        para datos de personas: facilita identificar visualmente a cada trabajador
+        y escala mejor a pantallas medianas sin necesidad de scroll horizontal.
+
+        La key usa `id_usuario_trab ?? user_name ?? Math.random()` como fallback
+        progresivo: los datos mock pueden no tener id_usuario_trab, pero sí user_name.
+        Math.random() es el último recurso para evitar warnings de React en desarrollo;
+        no afecta rendimiento porque el array de trabajadores es pequeño y estático.
+      */}
       <div className={styles.grid}>
         {trabajadores.map((t) => (
           <div key={t.id_usuario_trab ?? t.user_name ?? Math.random()} className={styles.card}>
             <div className={styles.cardHeader}>
+              {/* Avatar de texto con la inicial en mayúscula del nombre o username */}
               <div className={styles.avatar}>
                 {(t.nombre || t.user_name || '?').charAt(0).toUpperCase()}
               </div>
+
+              {/*
+                Menú de tres puntos dentro de la tarjeta.
+                No hay listener global de click-outside en este componente: el menú
+                se cierra al elegir una acción (setMenuOpen(null) explícito) o al
+                abrir el de otra tarjeta (el toggle reemplaza menuOpen con el nuevo ID).
+                El toggle usa `menuOpen === t.id_usuario_trab` para abrir/cerrar
+                el menú del trabajador actual sin afectar los demás.
+              */}
               <div className={styles.menuWrap}>
                 <button
                   className={styles.menuBtn}
@@ -214,16 +322,20 @@ function Trabajadores() {
                 )}
               </div>
             </div>
+
             <h4 className={styles.cardName}>{t.nombre || t.user_name}</h4>
             <p className={styles.cardCargo}>{t.cargo}</p>
             <div className={styles.cardDetails}>
               <span className={styles.turno}>{t.turno}</span>
+              {/* El celular se muestra condicionalmente; algunos trabajadores no lo tienen */}
               {t.celular && <span className={styles.celular}>📱 {t.celular}</span>}
             </div>
           </div>
         ))}
       </div>
 
+      {/* El modal se monta condicionalmente para que al cerrarse su estado
+          interno (formulario y error) se destruya automáticamente. */}
       {showModal && (
         <TrabajadorModal
           onClose={closeModal}

@@ -1,3 +1,7 @@
+// Página de gestión de inventario. Permite listar, filtrar, editar y eliminar
+// entradas del inventario, exportar el listado a Excel, cargar actualizaciones
+// masivas desde un archivo Excel, y consultar el stock crítico via un servlet Java.
+
 import { useState, useEffect, useRef } from 'react';
 import useRole from '../../hooks/useRole.js';
 import * as XLSX from 'xlsx';
@@ -9,6 +13,11 @@ import { formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Inventario.module.css';
 
+// Clasifica el nivel de stock de un ítem de inventario en tres estados:
+// - statusCritical: disponible ≤ 50 % del mínimo → nivel de alerta máximo (rojo).
+// - statusLow:      disponible ≤ mínimo           → por debajo del umbral (amarillo).
+// - statusOk:       disponible >  mínimo           → stock saludable (verde).
+// El resultado es una clase CSS que se aplica directamente a la celda de cantidad.
 const stockStatus = (item) => {
   const disp = Number(item.cantidad_disponible);
   const min  = Number(item.cantidad_minima);
@@ -17,7 +26,15 @@ const stockStatus = (item) => {
   return styles.statusOk;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de edición de inventario
+// ─────────────────────────────────────────────────────────────────────────────
+// Recibe el ítem completo del inventario como prop para pre-llenar el formulario.
+// El campo "Producto" se muestra deshabilitado porque no es editable desde aquí;
+// solo se pueden modificar las cantidades y la bodega asignada.
 function InventarioModal({ item, bodegas, onClose, onSave }) {
+  // Todos los valores se convierten a string para mantener coherencia con los
+  // inputs controlados; handleUpdate los revertirá a Number antes del PUT.
   const [form, setForm] = useState({
     cantidad_disponible: String(item.cantidad_disponible ?? 0),
     cantidad_reservada:  String(item.cantidad_reservada  ?? 0),
@@ -29,12 +46,14 @@ function InventarioModal({ item, bodegas, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Delega la conversión de tipos y el PUT al padre (handleUpdate).
     onSave(form);
   };
 
   return (
     <Modal title='Editar Inventario' onClose={onClose} size='md'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* El nombre del producto es solo informativo; no forma parte del payload */}
         <FormField label='Producto'>
           <Input value={item.nombre_producto ?? `Producto ${item.producto_id_producto}`} disabled />
         </FormField>
@@ -82,6 +101,13 @@ function InventarioModal({ item, bodegas, onClose, onSave }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de stock crítico (Java / Tomcat)
+// ─────────────────────────────────────────────────────────────────────────────
+// Muestra los resultados devueltos por el servlet Java StockCriticoServlet.
+// Maneja tres estados visuales distintos: cargando, error de conexión y tabla de datos.
+// Los nombres de campo se leen con fallback (item.producto ?? item.nombre_producto)
+// porque el servlet y el backend Node pueden devolver estructuras ligeramente distintas.
 function StockCriticoModal({ data, loading, error, onClose }) {
   return (
     <Modal title='Stock Crítico (Java)' onClose={onClose} size='lg'>
@@ -130,22 +156,44 @@ function StockCriticoModal({ data, loading, error, onClose }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Componente principal
+// ─────────────────────────────────────────────────────────────────────────────
 function Inventario() {
   const { isAdmin } = useRole();
-  const [items, setItems] = useState([]);
+
+  // `items` contiene el inventario completo; `bodegas` puebla el select del modal.
+  const [items, setItems]     = useState([]);
   const [bodegas, setBodegas] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch]     = useState('');
+
+  // `menuOpen` almacena el id_inventario del ítem cuyo menú ⋮ está visible, o null.
   const [menuOpen, setMenuOpen] = useState(null);
+
+  // `editando` contiene el objeto completo del ítem que se está editando, o null.
   const [editando, setEditando] = useState(null);
+
+  // Estados para la carga masiva desde Excel.
   const [importando, setImportando] = useState(false);
-  const [importMsg, setImportMsg] = useState(null);
+  // `importMsg` lleva { type: 'success' | 'warning' | 'error', text } para el banner.
+  const [importMsg, setImportMsg]   = useState(null);
+
+  // `confirmDelete` almacena el ítem pendiente de borrar para el banner de confirmación.
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [stockCriticoOpen, setStockCriticoOpen] = useState(false);
-  const [stockCriticoData, setStockCriticoData] = useState([]);
-  const [stockCriticoError, setStockCriticoError] = useState(null);
+
+  // Estados para el modal de stock crítico consultado al servlet Java.
+  const [stockCriticoOpen, setStockCriticoOpen]       = useState(false);
+  const [stockCriticoData, setStockCriticoData]       = useState([]);
+  const [stockCriticoError, setStockCriticoError]     = useState(null);
   const [stockCriticoLoading, setStockCriticoLoading] = useState(false);
+
+  // Referencia al input[type=file] oculto para activarlo programáticamente
+  // desde el botón "Cargar Excel" sin mostrar el input nativo al usuario.
   const fileInputRef = useRef(null);
 
+  // ── Carga inicial de datos ────────────────────────────────────────────────
+  // Solicita el inventario y las bodegas de forma independiente al montar.
+  // Las bodegas se necesitan para el select del modal de edición.
   useEffect(() => {
     api.get('/inventario')
       .then(({ data }) => setItems(data))
@@ -156,21 +204,37 @@ function Inventario() {
       .catch(() => {});
   }, []);
 
+  // ── Cierre del menú de tres puntos al hacer clic fuera ───────────────────
+  // El listener global de 'click' cierra cualquier menú abierto.
+  // El botón ⋮ usa e.stopPropagation() para que el clic que lo abre no lo
+  // cierre inmediatamente al llegar al document.
   useEffect(() => {
     const handleClickOutside = () => setMenuOpen(null);
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // ── Filtro de búsqueda en tiempo real ────────────────────────────────────
+  // Filtra `items` en cada render según el texto de búsqueda.
+  // Compara contra nombre del producto, ID de inventario y nombre de bodega;
+  // no hay petición al servidor, todo el filtrado ocurre en el cliente.
   const filtered = items.filter((item) => {
     const q = search.toLowerCase();
     return (
-      (item.nombre_producto ?? '').toLowerCase().includes(q) ||
+      (item.nombre_producto    ?? '').toLowerCase().includes(q) ||
       String(item.id_inventario ?? '').includes(q) ||
-      (item.descripcion_bodega ?? '').toLowerCase().includes(q)
+      (item.descripcion_bodega  ?? '').toLowerCase().includes(q)
     );
   });
 
+  // ── Exportar a Excel con SheetJS ─────────────────────────────────────────
+  // Exporta únicamente las filas visibles tras el filtro (filtered), no el total.
+  // Flujo:
+  //  1. Construye un array de objetos planos con las cabeceras en español.
+  //  2. XLSX.utils.json_to_sheet convierte el array a una hoja de cálculo.
+  //  3. XLSX.utils.book_new crea un libro vacío y book_append_sheet añade la hoja.
+  //  4. XLSX.writeFile dispara la descarga del archivo directamente en el navegador.
+  // El nombre del archivo incluye la fecha actual para facilitar el archivo histórico.
   const handleExport = () => {
     const fecha = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -194,6 +258,12 @@ function Inventario() {
     XLSX.writeFile(wb, nombreArchivo);
   };
 
+  // ── Consultar stock crítico en el servlet Java ────────────────────────────
+  // Abre el modal de inmediato en estado "cargando" y luego hace un fetch nativo
+  // (no axios, porque el servlet corre en Tomcat puerto 8080, fuera del backend Node)
+  // al endpoint StockCriticoServlet.
+  // - TypeError indica que el servidor no está levantado o hay un problema de red.
+  // - Cualquier otro error proviene de una respuesta HTTP no-ok del servlet.
   const handleStockCritico = async () => {
     setStockCriticoOpen(true);
     setStockCriticoLoading(true);
@@ -203,6 +273,7 @@ function Inventario() {
       const res = await fetch('http://localhost:8080/SIAPE-Servlets/StockCriticoServlet');
       if (!res.ok) throw new Error(`Error del servidor: ${res.status} ${res.statusText}`);
       const data = await res.json();
+      // Garantiza que el estado sea siempre un array aunque el servlet devuelva un objeto.
       setStockCriticoData(Array.isArray(data) ? data : []);
     } catch (err) {
       if (err instanceof TypeError) {
@@ -215,6 +286,21 @@ function Inventario() {
     }
   };
 
+  // ── Carga masiva desde Excel ──────────────────────────────────────────────
+  // Se activa cuando el usuario selecciona un archivo en el input[type=file] oculto.
+  // Flujo:
+  //  1. file.arrayBuffer() lee el binario del archivo en memoria.
+  //  2. XLSX.read parsea el buffer y devuelve un libro (wb).
+  //  3. Se toma la primera hoja (wb.SheetNames[0]) y sheet_to_json la convierte en
+  //     un array de objetos donde cada clave es el encabezado de columna del Excel.
+  //     `cellDates: true` hace que las celdas de fecha lleguen como objetos Date.
+  //  4. El array se envía al endpoint POST /inventario/carga-masiva del backend,
+  //     que procesa cada fila y devuelve un resumen { creados, actualizados, errores }.
+  //  5. Se recarga el inventario desde el servidor para reflejar los cambios.
+  //  6. Se clasifica el resultado como 'success', 'warning' (parcial) o 'error'
+  //     para mostrar el banner con el color adecuado.
+  // e.target.value = '' limpia el input para que el mismo archivo pueda
+  // volver a seleccionarse sin necesidad de recargar la página.
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -238,16 +324,22 @@ function Inventario() {
       const { data } = await api.post('/inventario/carga-masiva', filas);
       const { creados, actualizados, errores } = data;
 
+      // Recarga el inventario completo para reflejar los registros nuevos/actualizados.
       const { data: inv } = await api.get('/inventario');
       setItems(inv);
 
       const totalOk = creados + actualizados;
       if (errores.length === 0) {
+        // Todas las filas se procesaron correctamente.
         setImportMsg({
           type: 'success',
           text: `Carga exitosa — ${creados} creado(s), ${actualizados} actualizado(s).`,
         });
       } else {
+        // Algunas filas fallaron. Si ninguna fue exitosa el banner es rojo ('error');
+        // si al menos una tuvo éxito es naranja ('warning').
+        // Solo se muestran los primeros 3 errores para no saturar el banner;
+        // si hay más se agrega '…' al final.
         const resumen = errores.slice(0, 3).join(' | ') + (errores.length > 3 ? '…' : '');
         setImportMsg({
           type: totalOk === 0 ? 'error' : 'warning',
@@ -264,12 +356,20 @@ function Inventario() {
     }
   };
 
+  // ── Eliminación en dos pasos: inventario → producto ───────────────────────
+  // Un registro de inventario tiene llave foránea al producto, por lo que primero
+  // se elimina el registro de inventario y luego el producto asociado.
+  // Invertir el orden causaría un error de integridad referencial en la base de datos.
+  // Si cualquiera de las dos peticiones falla se muestra el error del backend;
+  // en ese caso el ítem puede quedar en un estado parcialmente eliminado,
+  // condición que el administrador debe resolver manualmente.
   const handleConfirmDelete = async () => {
     const item = confirmDelete;
     setConfirmDelete(null);
     try {
       await api.delete(`/inventario/${item.id_inventario}`);
       await api.delete(`/productos/${item.producto_id_producto}`);
+      // Elimina el ítem del estado local sin recargar la lista completa.
       setItems((prev) => prev.filter((i) => i.id_inventario !== item.id_inventario));
     } catch (error) {
       console.error(error);
@@ -277,6 +377,11 @@ function Inventario() {
     }
   };
 
+  // ── Guardar edición del inventario ────────────────────────────────────────
+  // Convierte todos los campos a Number antes del PUT porque el formulario
+  // los almacena como strings. `|| 0` previene NaN en campos opcionales vacíos.
+  // Recarga el inventario completo tras la actualización para reflejar cambios
+  // de otros campos que el backend pueda haber calculado (p. ej. ultima_actualizacion).
   const handleUpdate = async (form) => {
     try {
       await api.put(`/inventario/${editando.id_inventario}`, {
@@ -307,7 +412,16 @@ function Inventario() {
           />
         </div>
         <div className={styles.actions}>
+          {/* Exporta el listado filtrado actual a un .xlsx con SheetJS */}
           <button className={styles.btnOutline} onClick={handleExport}>📄 Exportar Reporte</button>
+
+          {/*
+            El input[type=file] está oculto con display:none para evitar el aspecto
+            nativo del navegador. El botón "Cargar Excel" lo activa mediante
+            fileInputRef.current.click(), lo que abre el diálogo del sistema operativo.
+            `accept` restringe la selección a archivos .xlsx y .xls.
+            Durante la importación el botón se deshabilita para evitar envíos dobles.
+          */}
           <input
             ref={fileInputRef}
             type='file'
@@ -322,6 +436,8 @@ function Inventario() {
           >
             {importando ? 'Importando...' : '📂 Cargar Excel'}
           </button>
+
+          {/* Consulta el servlet Java StockCriticoServlet en Tomcat :8080 */}
           <button
             className={styles.btnJava}
             onClick={handleStockCritico}
@@ -332,6 +448,10 @@ function Inventario() {
         </div>
       </div>
 
+      {/* ── Banner de confirmación de eliminación ────────────────────────────
+          Flujo: clic en "Eliminar" en el menú ⋮ → setConfirmDelete(item) → aparece
+          este banner → "Confirmar" ejecuta handleConfirmDelete (primero inventario,
+          luego producto) → "Cancelar" descarta sin borrar nada. */}
       {confirmDelete && (
         <div className={styles.confirmBanner}>
           <span>¿Eliminar el producto <strong>{confirmDelete.nombre_producto ?? confirmDelete.producto_id_producto}</strong> y su inventario? Esta acción no se puede deshacer.</span>
@@ -342,6 +462,12 @@ function Inventario() {
         </div>
       )}
 
+      {/* ── Banner de resultado de la importación ────────────────────────────
+          Se muestra después de procesar un Excel. El color varía según `importMsg.type`:
+          - success  → verde: todas las filas procesadas correctamente.
+          - warning  → naranja: algunas filas fallaron pero otras tuvieron éxito.
+          - error    → rojo: ninguna fila procesada o error de parseo del archivo.
+          El botón ✕ lo cierra manualmente. */}
       {importMsg && (
         <div className={`${styles.importBanner} ${styles[`importBanner_${importMsg.type}`]}`}>
           <span>{importMsg.text}</span>
@@ -374,6 +500,8 @@ function Inventario() {
                   </span>
                 </td>
                 <td>
+                  {/* stockStatus colorea la celda según si el stock supera,
+                      roza o está por debajo del 50 % del mínimo configurado */}
                   <span className={`${styles.qty} ${stockStatus(item)}`}>
                     {item.cantidad_disponible}
                   </span>
@@ -382,6 +510,9 @@ function Inventario() {
                 <td>{item.cantidad_minima}</td>
                 <td>{formatDate(item.ultima_actualizacion)}</td>
                 <td className={styles.menuCell}>
+                  {/* Menú de tres puntos: solo visible para administradores.
+                      e.stopPropagation() impide que el listener global de click
+                      cierre el menú en el mismo evento que lo abre. */}
                   {isAdmin() && (
                     <div className={styles.menuWrap}>
                       <button
@@ -409,6 +540,8 @@ function Inventario() {
         )}
       </div>
 
+      {/* El modal se monta cuando `editando` tiene un ítem; al cerrar se pone a null
+          y el estado interno del formulario se destruye automáticamente. */}
       {editando && (
         <InventarioModal
           item={editando}
