@@ -50,22 +50,8 @@ function Login() {
       navigate('/dashboard');
 
     } catch {
-      // Fallback de credenciales mock para desarrollo o cuando el backend
-      // no está disponible. Simula la misma estructura de datos que devuelve
-      // el servidor real (token + objeto user con user_name y cargo).
-      if (form.user_name === 'admin' && form.password === '123456') {
-        localStorage.setItem('siape_token', 'mock-token-123');
-        localStorage.setItem(
-          'siape_user',
-          JSON.stringify({ user_name: 'admin', cargo: 'Administrador' })
-        );
-        navigate('/dashboard');
-      } else {
-        // Cualquier otro error (credenciales incorrectas, red caída, etc.)
-        // muestra un mensaje genérico para no revelar si el usuario existe.
-        setError('Usuario o contraseña incorrectos.');
-        setLoading(false);
-      }
+      setError('Usuario o contraseña incorrectos.');
+      setLoading(false);
     }
   };
 

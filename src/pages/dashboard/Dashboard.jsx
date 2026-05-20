@@ -1,7 +1,7 @@
 // Página principal del sistema. Carga en paralelo cuatro métricas clave
 // y las presenta en tarjetas clicables que navegan a la sección correspondiente.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
@@ -87,9 +87,29 @@ function Dashboard() {
   const [pedidosHoy, setPedidosHoy]                 = useState([]);
   const [proveedoresActivos, setProveedoresActivos] = useState(0);
 
-  // Carga inicial de datos al montar el componente.
-  // El array de dependencias vacío [] garantiza que solo se ejecute una vez.
+  // tokenReady se inicializa de forma lazy: si el JWT ya está en localStorage al montar
+  // el componente se arranca en true y la carga de datos ocurre de inmediato.
+  // Si todavía no está disponible (p. ej. carrera de render en React 18 o Strict Mode)
+  // queda en false y el efecto de polling de abajo lo pone en true en cuanto aparezca.
+  const [tokenReady, setTokenReady] = useState(() => Boolean(localStorage.getItem('siape_token')));
+  const pollRef = useRef(null);
+
   useEffect(() => {
+    if (tokenReady) return;
+    pollRef.current = setInterval(() => {
+      if (localStorage.getItem('siape_token')) {
+        setTokenReady(true);
+        clearInterval(pollRef.current);
+      }
+    }, 50);
+    return () => clearInterval(pollRef.current);
+  }, [tokenReady]);
+
+  // Carga de datos: solo se ejecuta cuando tokenReady pasa a true,
+  // garantizando que el interceptor de Axios siempre encuentra el JWT en localStorage.
+  useEffect(() => {
+    if (!tokenReady) return;
+
     const hoy = todayLocal();
     const mes = firstOfMonthLocal();
 
@@ -162,7 +182,7 @@ function Dashboard() {
         setProveedoresActivos(activos.length);
       })
       .catch(() => {});
-  }, []);
+  }, [tokenReady]);
 
   const hoy      = todayLocal();
   const navigate = useNavigate();
