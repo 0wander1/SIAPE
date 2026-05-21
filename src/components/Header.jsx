@@ -160,12 +160,10 @@ function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Elimina los datos de sesión y redirige a la raíz, donde App.jsx
-  // redirigirá al login al no encontrar token.
   const handleLogout = () => {
     localStorage.removeItem('siape_token');
     localStorage.removeItem('siape_user');
-    navigate('/');
+    navigate('/login');
   };
 
   // Cierra el dropdown y abre el modal indicado por `type`.

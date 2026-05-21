@@ -164,6 +164,67 @@ function ProductoModal({ onClose, onSave, bodegas, initialData }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Modal de detalle: proveedores asociados al producto
+// ─────────────────────────────────────────────────────────────────────────────
+function DetalleProductoModal({ producto, onClose }) {
+  const [proveedores, setProveedores] = useState([]);
+
+  // Se ejecuta una sola vez al montar porque producto.id_producto no cambia
+  // durante el ciclo de vida de este modal.
+  useEffect(() => {
+    api.get(`/productos/${producto.id_producto}/proveedores`)
+      .then(({ data }) => setProveedores(data))
+      .catch(() => {});
+  }, [producto.id_producto]);
+
+  return (
+    <Modal title={`Proveedores — ${producto.nombre_producto}`} onClose={onClose} size='md'>
+      {proveedores.length === 0 ? (
+        <p style={{ color: '#6b7280', fontSize: 14, margin: '8px 0 24px' }}>
+          Sin proveedores registrados.
+        </p>
+      ) : (
+        <div style={{ overflowX: 'auto', marginBottom: 24 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                <th style={{ textAlign: 'left',   padding: '8px 12px', color: '#374151' }}>Proveedor</th>
+                <th style={{ textAlign: 'right',  padding: '8px 12px', color: '#374151' }}>Precio Compra</th>
+                <th style={{ textAlign: 'center', padding: '8px 12px', color: '#374151' }}>Tiempo Entrega (días)</th>
+                <th style={{ textAlign: 'center', padding: '8px 12px', color: '#374151' }}>Proveedor Principal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {proveedores.map((pv) => (
+                <tr key={pv.id_proveedor} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '8px 12px' }}>{pv.nombre_proveedor}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{formatCOP(pv.precio_compra)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>{pv.tiempo_entrega_dias}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    {pv.es_proveedor_principal ? 'Sí' : 'No'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={onClose}
+          style={{
+            padding: '8px 20px', borderRadius: 6, border: '1px solid #d1d5db',
+            background: '#f9fafb', cursor: 'pointer', fontSize: 14,
+          }}
+        >
+          Cerrar
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 function Productos() {
@@ -181,6 +242,8 @@ function Productos() {
   const [errorMsg, setErrorMsg]       = useState('');
   // `confirmDelete` almacena el producto pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `verDetalle` almacena el producto cuyo panel de detalle está abierto, o null.
+  const [verDetalle, setVerDetalle]   = useState(null);
   // `editando` guarda el id_producto que se está editando (null en creación).
   const [editando, setEditando]       = useState(null);
   // `initialData` contiene los valores normalizados para pre-llenar el formulario.
@@ -418,6 +481,7 @@ function Productos() {
                       </button>
                       {menuOpen === p.id_producto && (
                         <div className={styles.dropdown}>
+                          <button onClick={() => { setVerDetalle(p); setMenuOpen(null); }}>👁️ Ver Detalles</button>
                           <button onClick={() => openEdit(p)}>✏️ Editar</button>
                           <button
                             className={styles.dangerItem}
@@ -436,6 +500,13 @@ function Productos() {
           <p className={styles.empty}>No se encontraron productos.</p>
         )}
       </div>
+
+      {verDetalle && (
+        <DetalleProductoModal
+          producto={verDetalle}
+          onClose={() => setVerDetalle(null)}
+        />
+      )}
 
       {/* El modal se monta condicionalmente para que al cerrarlo su estado
           interno se destruya y la próxima apertura parta siempre de cero. */}

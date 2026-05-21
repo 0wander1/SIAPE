@@ -356,6 +356,8 @@ function Facturas() {
 
   // `confirmDelete` almacena la factura pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // ── Carga inicial de datos ────────────────────────────────────────────────
   // Los tres recursos se solicitan en paralelo al montar el componente.
@@ -430,8 +432,9 @@ function Facturas() {
       await api.delete(`/facturas/${f.id_factura}`);
       setFacturas((prev) => prev.filter((x) => x.id_factura !== f.id_factura));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'Error al eliminar factura');
+      const msg = error.response?.data?.message || 'Error al eliminar factura';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
@@ -481,13 +484,29 @@ function Facturas() {
       if (error.response?.status === 409) {
         setPedidoError(error.response.data?.message || 'Ya existe una factura para ese pedido.');
       } else {
-        alert(error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} factura`);
+        const msg = error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} factura`;
+        setErrorMsg(msg);
+        setTimeout(() => setErrorMsg(''), 4000);
       }
     }
   };
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <div className={styles.searchWrap}>
           <span>🔍</span>

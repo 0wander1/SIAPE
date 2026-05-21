@@ -1,6 +1,3 @@
-// Página de gestión de pedidos. Lista todos los pedidos del sistema y permite
-// a los administradores crearlos, editarlos y eliminarlos.
-
 import { useState, useEffect } from 'react';
 import useRole from '../../hooks/useRole.js';
 import Modal from '../../components/Modal.jsx';
@@ -11,131 +8,145 @@ import { formatCOP, formatDate } from '../../utils/format.js';
 import api from '../../services/api.js';
 import styles from './Pedidos.module.css';
 
-// Resuelve la clase CSS del badge de estado según el valor que devuelve el backend.
-// Devuelve badgePending como fallback para estados desconocidos.
 const estadoClass = (estado) => {
   const map = {
-    'pendiente':      styles.badgePending,
-    'confirmado':     styles.badgeConfirmed,
-    'en_preparacion': styles.badgePrep,
-    'despachado':     styles.badgeTransit,
-    'entregado':      styles.badgeDelivered,
-    'cancelado':      styles.badgeCancelled,
+    pendiente:   styles.badgePending,
+    confirmado:  styles.badgeConfirmed,
+    en_transito: styles.badgeTransit,
+    recibido:    styles.badgeDelivered,
+    cancelado:   styles.badgeCancelled,
   };
   return map[estado] || styles.badgePending;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Modal de creación / edición de pedido
-// ─────────────────────────────────────────────────────────────────────────────
-// Recibe `initialData` cuando se edita un pedido existente; si es null o undefined
-// el formulario arranca vacío (modo creación). Esta distinción se hace una sola
-// vez al inicializar el estado con `initialData ?? emptyForm`.
-function PedidoModal({ onClose, onSave, clientes, productos, initialData }) {
-  const emptyForm = {
-    cliente: '', producto: '', cantidad: '', direccion: '',
-    fechaEstimada: '', estado: 'pendiente', observaciones: '', valorTotal: 0,
-  };
+const ESTADOS = [
+  { value: 'pendiente',   label: 'Pendiente' },
+  { value: 'confirmado',  label: 'Confirmado' },
+  { value: 'en_transito', label: 'En Tránsito' },
+  { value: 'recibido',    label: 'Recibido' },
+  { value: 'cancelado',   label: 'Cancelado' },
+];
 
-  // En edición, el estado inicial viene de `initialData` ya normalizado por openEdit().
-  // En creación, parte de emptyForm con el estado 'pendiente' por defecto.
-  const [form, setForm] = useState(initialData ?? emptyForm);
+const emptyForm = { proveedor: '', estado: 'pendiente', fechaEstimada: '', observaciones: '' };
+const emptyItem = { producto: '', cantidad: '', precioUnitario: '' };
 
-  // Handler genérico que actualiza el campo correspondiente y,
-  // cuando el usuario cambia el producto o la cantidad, recalcula el valorTotal
-  // automáticamente multiplicando el precio unitario del producto por la cantidad.
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de creación de pedido a proveedor
+// ─────────────────────────────────────────────────────────────────────────────
+function PedidoModal({ onClose, onSave, proveedores, productos }) {
+  const [form, setForm]                             = useState(emptyForm);
+  const [items, setItems]                           = useState([]);
+  const [itemForm, setItemForm]                     = useState(emptyItem);
+  const [productosProveedor, setProductosProveedor] = useState([]);
+  const [errorMsg, setErrorMsg]                     = useState('');
+
+  // Cuando el proveedor cambia, obtiene sus productos_asociados y los cruza con
+  // la lista completa de productos para recuperar nombre y demás campos.
+  // Si se limpia el selector, vacía la lista para que el dropdown quede vacío.
+  useEffect(() => {
+    if (!form.proveedor) {
+      setProductosProveedor([]);
+      return;
+    }
+    api.get(`/proveedores/${form.proveedor}`)
+      .then(({ data }) => {
+        const asociados = (data.productos_asociados ?? [])
+          .map((pa) => productos.find((p) => p.id_producto === pa.producto_id_producto))
+          .filter(Boolean);
+        setProductosProveedor(asociados);
+      })
+      .catch(() => setProductosProveedor([]));
+  }, [form.proveedor]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const updated = { ...form, [name]: value };
-
-    if (name === 'producto' || name === 'cantidad') {
-      // Busca el producto por ID (comparando como string para tolerar number/string del backend).
-      // Si se acaba de cambiar 'producto', usa el nuevo value; si se cambió 'cantidad',
-      // usa el producto ya seleccionado en el formulario.
-      const prod = productos.find(
-        (p) => String(p.id_producto ?? p.id) === String(name === 'producto' ? value : form.producto)
-      );
-      const cant = Number(name === 'cantidad' ? value : form.cantidad);
-      // El campo valorTotal se muestra deshabilitado en el formulario; es solo de lectura
-      // para el usuario y se recalcula aquí en cada cambio relevante.
-      updated.valorTotal = prod ? Number(prod.valor_de_venta ?? prod.precio ?? 0) * cant : form.valorTotal;
-    }
-    setForm(updated);
+    // Al cambiar el proveedor los productos disponibles cambian, así que se
+    // limpia el selector de producto del ítem para evitar un valor huérfano.
+    if (name === 'proveedor') setItemForm(emptyItem);
+    setForm({ ...form, [name]: value });
   };
 
-  const handleSubmit = (e) => {
+  const addItem = () => {
+    if (!itemForm.producto || !itemForm.cantidad) return;
+    const prod = productosProveedor.find((p) => String(p.id_producto) === itemForm.producto);
+    setItems([...items, {
+      producto_id_producto: Number(itemForm.producto),
+      nombre_producto:      prod?.nombre_producto ?? '',
+      cantidad:             Number(itemForm.cantidad),
+      precio_unitario:      Number(itemForm.precioUnitario) || 0,
+    }]);
+    setItemForm(emptyItem);
+  };
+
+  const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
+
+  // El valor total se recalcula en cada render a partir de los items acumulados.
+  const valorTotal = items.reduce((sum, i) => sum + i.cantidad * i.precio_unitario, 0);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Delega la lógica de POST/PUT al padre (handleSave en Pedidos),
-    // que sabe si se está creando o editando según el estado `editando`.
-    onSave(form);
+    try {
+      await onSave({
+        proveedor_id_proveedor: Number(form.proveedor),
+        estado:                 form.estado,
+        fecha_estimada:         form.fechaEstimada || null,
+        observaciones:          form.observaciones || null,
+        valor_total:            valorTotal,
+        items:                  items.map(({ producto_id_producto, cantidad, precio_unitario }) => ({
+          producto_id_producto, cantidad, precio_unitario,
+        })),
+      });
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Error al crear el pedido.';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
+    }
   };
-
-  // Determina el título del modal y el texto del botón de envío.
-  const isEdit = !!initialData;
 
   return (
-    <Modal title={isEdit ? 'Editar Pedido' : 'Nuevo Pedido'} onClose={onClose} size='lg'>
+    <Modal title='Nuevo Pedido a Proveedor' onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <FormRow>
-          <FormField label='Cliente' required>
-            <Select name='cliente' value={form.cliente} onChange={handleChange} required>
-              <option value=''>Seleccionar cliente...</option>
-              {clientes.map((c) => (
-                <option key={c.id ?? c.id_usuario_cli} value={c.id ?? c.id_usuario_cli}>
-                  {c.nombre ?? c.nombre_usuario}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField label='Producto' required>
-            <Select name='producto' value={form.producto} onChange={handleChange} required>
-              <option value=''>Seleccionar producto...</option>
-              {productos.map((p) => (
-                <option key={p.id_producto ?? p.id} value={p.id_producto ?? p.id}>
-                  {p.nombre_producto ?? p.nombre}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-        </FormRow>
+        {errorMsg && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+            borderRadius: 8, padding: '10px 16px', fontSize: 14,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+          }}>
+            <span>{errorMsg}</span>
+            <button
+              type='button'
+              onClick={() => setErrorMsg('')}
+              style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+            >✕</button>
+          </div>
+        )}
 
         <FormRow>
-          <FormField label='Cantidad' required>
-            <Input
-              type='number' name='cantidad' min='1'
-              value={form.cantidad} onChange={handleChange}
-              placeholder='0' required
-            />
+          <FormField label='Proveedor' required>
+            <Select name='proveedor' value={form.proveedor} onChange={handleChange} required>
+              <option value=''>Seleccionar proveedor...</option>
+              {proveedores.map((p) => (
+                <option key={p.id_proveedor} value={p.id_proveedor}>
+                  {p.nombre_proveedor}
+                </option>
+              ))}
+            </Select>
           </FormField>
           <FormField label='Estado'>
             <Select name='estado' value={form.estado} onChange={handleChange}>
-              <option value='pendiente'>Pendiente</option>
-              <option value='confirmado'>Confirmado</option>
-              <option value='en_preparacion'>En Preparación</option>
-              <option value='despachado'>Despachado</option>
-              <option value='entregado'>Entregado</option>
-              <option value='cancelado'>Cancelado</option>
+              {ESTADOS.map((e) => (
+                <option key={e.value} value={e.value}>{e.label}</option>
+              ))}
             </Select>
           </FormField>
         </FormRow>
 
-        <FormField label='Dirección de Envío' required>
-          <Input
-            name='direccion' value={form.direccion} onChange={handleChange}
-            placeholder='Cra 10 #20-30, Ciudad' required
-          />
-        </FormField>
-
         <FormRow>
-          <FormField label='Fecha de Entrega Estimada' required>
-            <Input
-              type='date' name='fechaEstimada'
-              value={form.fechaEstimada} onChange={handleChange} required
-            />
+          <FormField label='Fecha Estimada de Entrega'>
+            <Input type='date' name='fechaEstimada' value={form.fechaEstimada} onChange={handleChange} />
           </FormField>
-          {/* El valor total es calculado automáticamente y no editable por el usuario */}
           <FormField label='Valor Total'>
-            <Input value={formatCOP(form.valorTotal)} disabled />
+            <Input value={formatCOP(valorTotal)} disabled />
           </FormField>
         </FormRow>
 
@@ -146,9 +157,228 @@ function PedidoModal({ onClose, onSave, clientes, productos, initialData }) {
           />
         </FormField>
 
+        {/* ── Sección de ítems ──────────────────────────────────────────────── */}
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+            Productos del Pedido
+          </p>
+          <FormRow>
+            <FormField label='Producto'>
+              <Select
+                value={itemForm.producto}
+                onChange={(e) => setItemForm({ ...itemForm, producto: e.target.value })}
+              >
+                <option value=''>
+                  {form.proveedor ? 'Seleccionar...' : 'Selecciona un proveedor primero'}
+                </option>
+                {productosProveedor.map((p) => (
+                  <option key={p.id_producto} value={p.id_producto}>
+                    {p.nombre_producto}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label='Cantidad'>
+              <Input
+                type='number' min='1' placeholder='0'
+                value={itemForm.cantidad}
+                onChange={(e) => setItemForm({ ...itemForm, cantidad: e.target.value })}
+              />
+            </FormField>
+            <FormField label='Precio Unitario'>
+              <Input
+                type='number' min='0' placeholder='0'
+                value={itemForm.precioUnitario}
+                onChange={(e) => setItemForm({ ...itemForm, precioUnitario: e.target.value })}
+              />
+            </FormField>
+          </FormRow>
+
+          <button
+            type='button'
+            className={styles.btnNew}
+            style={{ fontSize: 13, padding: '6px 14px', marginTop: 4 }}
+            onClick={addItem}
+          >
+            + Agregar Ítem
+          </button>
+
+          {items.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {items.map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: '#f8fafc', border: '1px solid #e2e8f0',
+                    borderRadius: 6, padding: '6px 12px', fontSize: 13,
+                  }}
+                >
+                  <span style={{ flex: 1 }}>{item.nombre_producto}</span>
+                  <span style={{ color: '#6b7280', marginRight: 16 }}>
+                    x{item.cantidad} — {formatCOP(item.precio_unitario)}
+                  </span>
+                  <button
+                    type='button'
+                    onClick={() => removeItem(idx)}
+                    style={{ color: '#dc2626', fontWeight: 700, fontSize: 14, lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-          <BtnPrimary type='submit'>{isEdit ? 'Guardar Cambios' : 'Crear Pedido'}</BtnPrimary>
+          <BtnPrimary type='submit'>Crear Pedido</BtnPrimary>
+        </FormActions>
+      </form>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de detalle de pedido a proveedor
+// ─────────────────────────────────────────────────────────────────────────────
+function DetallePedidoModal({ pedido, onClose }) {
+  const items = pedido.items ?? [];
+
+  return (
+    <Modal title='Detalle del Pedido' onClose={onClose} size='lg'>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* ── Encabezado: ID + badge de estado ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#6b7280' }}>
+            #{pedido.id_pedido_prov}
+          </span>
+          <span className={`${styles.badge} ${estadoClass(pedido.estado)}`}>
+            {pedido.estado}
+          </span>
+        </div>
+
+        {/* ── Info general ── */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px',
+          background: '#f8fafc', borderRadius: 8, padding: '14px 16px',
+          border: '1px solid #f1f5f9',
+        }}>
+          {[
+            ['Proveedor',       pedido.nombre_proveedor ?? '-'],
+            ['Trabajador',      pedido.trabajador        ?? '-'],
+            ['Fecha Estimada',  formatDate(pedido.fechaEstimada)],
+            ['Fecha Creación',  formatDate(pedido.fecha_creacion)],
+            ['Valor Total',     formatCOP(pedido.valorTotal)],
+            ['Observaciones',   pedido.observaciones     || '-'],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 2 }}>
+                {label}
+              </p>
+              <p style={{ fontSize: 13, color: '#374151' }}>{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Tabla de productos ── */}
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>
+            Productos
+          </p>
+          {items.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#9ca3af', fontStyle: 'italic' }}>Sin productos registrados.</p>
+          ) : (
+            <div style={{ border: '1px solid #f1f5f9', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    {['Producto', 'Cantidad', 'Precio Unitario', 'Subtotal'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid #f1f5f9' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f8fafc' }}>
+                      <td style={{ padding: '9px 12px', color: '#374151' }}>{item.nombre_producto ?? '-'}</td>
+                      <td style={{ padding: '9px 12px', color: '#374151' }}>{item.cantidad}</td>
+                      <td style={{ padding: '9px 12px', color: '#374151' }}>{formatCOP(item.precio_unitario)}</td>
+                      <td style={{ padding: '9px 12px', color: '#374151', fontWeight: 500 }}>{formatCOP(item.cantidad * item.precio_unitario)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── Botón Cerrar ── */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <BtnSecondary type='button' onClick={onClose}>Cerrar</BtnSecondary>
+        </div>
+
+      </div>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de edición de pedido a proveedor
+// ─────────────────────────────────────────────────────────────────────────────
+function EditarPedidoModal({ pedido, onClose, onSave }) {
+  const [form, setForm] = useState({
+    estado:        pedido.estado ?? 'pendiente',
+    fechaEstimada: pedido.fechaEstimada?.slice(0, 10) ?? '',
+    observaciones: pedido.observaciones ?? '',
+  });
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(form);
+  };
+
+  return (
+    <Modal title={`Editar Pedido #${pedido.id_pedido_prov}`} onClose={onClose} size='md'>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        <FormField label='Estado'>
+          <Select name='estado' value={form.estado} onChange={handleChange}>
+            {ESTADOS.map((e) => (
+              <option key={e.value} value={e.value}>{e.label}</option>
+            ))}
+          </Select>
+        </FormField>
+
+        {form.estado === 'recibido' && (
+          <div style={{
+            background: '#fffbeb', border: '1px solid #fcd34d',
+            color: '#92400e', borderRadius: 6, padding: '10px 14px', fontSize: 13, lineHeight: 1.5,
+          }}>
+            ⚠️ Al guardar este cambio, las cantidades de los productos se agregarán automáticamente al inventario. Esta acción no se puede deshacer.
+          </div>
+        )}
+
+        <FormField label='Fecha Estimada de Entrega'>
+          <Input type='date' name='fechaEstimada' value={form.fechaEstimada} onChange={handleChange} />
+        </FormField>
+
+        <FormField label='Observaciones'>
+          <Textarea
+            name='observaciones' value={form.observaciones} onChange={handleChange}
+            placeholder='Instrucciones adicionales...'
+          />
+        </FormField>
+
+        <FormActions>
+          <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
+          <BtnPrimary type='submit'>Guardar Cambios</BtnPrimary>
         </FormActions>
       </form>
     </Modal>
@@ -161,158 +391,76 @@ function PedidoModal({ onClose, onSave, clientes, productos, initialData }) {
 function Pedidos() {
   const { isAdmin } = useRole();
 
-  const [pedidos, setPedidos]     = useState([]);
-  const [clientes, setClientes]   = useState([]);
-  const [productos, setProductos] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-
-  // `menuOpen` almacena el ID del pedido cuyo menú de tres puntos está visible,
-  // o null si ningún menú está abierto. Solo puede haber uno abierto a la vez.
-  const [menuOpen, setMenuOpen] = useState(null);
-
-  // `editando` guarda el ID del pedido que se está editando (null en creación).
-  // `initialData` contiene los valores normalizados para pre-llenar el formulario.
-  const [editando, setEditando]       = useState(null);
-  const [initialData, setInitialData] = useState(null);
-
-  // `errorMsg` muestra el banner de error rojo (p. ej. al intentar eliminar un
-  // pedido con factura asociada). Se auto-limpia a los 4 segundos.
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // `confirmDelete` almacena el objeto del pedido pendiente de eliminar.
-  // Cuando es distinto de null se renderiza el banner de confirmación.
+  const [pedidos, setPedidos]             = useState([]);
+  const [proveedores, setProveedores]     = useState([]);
+  const [productos, setProductos]         = useState([]);
+  const [showModal, setShowModal]         = useState(false);
+  const [editando, setEditando]           = useState(null);
+  const [verDetalle, setVerDetalle]       = useState(null);
+  const [menuOpen, setMenuOpen]           = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [errorMsg, setErrorMsg]           = useState('');
 
-  // ── Carga inicial de datos ────────────────────────────────────────────────
-  // Los tres recursos se piden de forma independiente al montar el componente.
-  // Clientes y productos se necesitan para poblar los selects del modal.
   useEffect(() => {
-    api.get('/pedidos').then(({ data }) => setPedidos(data)).catch(() => {});
-    api.get('/clientes').then(({ data }) => setClientes(data)).catch(() => {});
+    api.get('/pedidos-proveedor').then(({ data }) => setPedidos(data)).catch(() => {});
+    api.get('/proveedores').then(({ data }) => setProveedores(data)).catch(() => {});
     api.get('/productos').then(({ data }) => setProductos(data)).catch(() => {});
   }, []);
 
-  // ── Cierre del menú de tres puntos al hacer clic fuera ───────────────────
-  // Se registra un listener global de 'click' en el documento. Cuando el usuario
-  // hace clic en cualquier parte que NO sea el propio botón ⋮ (que usa
-  // e.stopPropagation() para evitar que este listener lo cierre al abrirlo),
-  // setMenuOpen(null) cierra el menú que esté abierto.
-  // El cleanup del useEffect elimina el listener al desmontar el componente.
   useEffect(() => {
-    const handleClickOutside = () => setMenuOpen(null);
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    const close = () => setMenuOpen(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
   }, []);
 
-  // Muestra el banner de error durante 4 segundos y luego lo oculta.
-  // Se usa, entre otros casos, cuando el backend rechaza la eliminación de un
-  // pedido que ya tiene una factura asociada (el servidor devuelve un mensaje
-  // explicativo en error.response.data.message).
   const showError = (msg) => {
     setErrorMsg(msg);
     setTimeout(() => setErrorMsg(''), 4000);
   };
 
-  // ── Confirmación y ejecución de eliminación ───────────────────────────────
-  // Se invoca solo cuando el usuario hace clic en "Confirmar" dentro del banner.
-  // 1. Cierra el banner inmediatamente para evitar doble clic.
-  // 2. Llama al endpoint DELETE.
-  // 3. Si tiene éxito, elimina el pedido del estado local sin recargar la lista.
-  // 4. Si el backend devuelve error (p. ej. llave foránea con facturas),
-  //    muestra el mensaje en el banner de error rojo.
   const handleConfirmDelete = async () => {
     const p = confirmDelete;
     setConfirmDelete(null);
     try {
-      await api.delete(`/pedidos/${p.id}`);
-      setPedidos((prev) => prev.filter((x) => x.id !== p.id));
+      await api.delete(`/pedidos-proveedor/${p.id_pedido_prov}`);
+      setPedidos((prev) => prev.filter((x) => x.id_pedido_prov !== p.id_pedido_prov));
     } catch (error) {
-      console.error(error);
-      showError(error.response?.data?.message || 'Error al eliminar pedido');
+      showError(error.response?.data?.message || 'Error al eliminar el pedido.');
     }
   };
 
-  // Cierra el modal y limpia el estado de edición para que la próxima
-  // apertura del modal arranque siempre en modo creación con formulario vacío.
-  const closeModal = () => {
-    setShowModal(false);
-    setEditando(null);
-    setInitialData(null);
-  };
-
-  // Prepara el modal para editar un pedido existente:
-  // - Normaliza los IDs a string para que coincidan con los values de los <option>.
-  // - Trunca la fecha ISO a YYYY-MM-DD para que el input type='date' la reconozca.
-  // - Cierra el menú de tres puntos antes de abrir el modal.
-  const openEdit = (p) => {
-    setInitialData({
-      cliente:       String(p.clienteId ?? ''),
-      producto:      String(p.productoId ?? ''),
-      cantidad:      String(p.cantidad ?? ''),
-      direccion:     p.direccion ?? '',
-      fechaEstimada: p.fechaEstimada?.slice(0, 10) ?? '',
-      estado:        p.estado ?? 'Pendiente',
-      observaciones: p.observaciones ?? '',
-      valorTotal:    Number(p.valorTotal ?? 0),
-    });
-    setEditando(p.id);
-    setMenuOpen(null);
-    setShowModal(true);
-  };
-
-  // ── Guardar pedido (crear o editar) ──────────────────────────────────────
-  const handleSave = async (form) => {
-    // Lee el objeto de usuario autenticado desde localStorage para adjuntar
-    // usuario_trab_id al payload. El backend lo usa para registrar qué trabajador
-    // creó o modificó el pedido.
-    const user = JSON.parse(localStorage.getItem('siape_user') || 'null');
-
-    // Construye el payload con los nombres de campo que espera el backend,
-    // que difieren de los nombres internos del formulario.
-    const payload = {
-      cliente_id_usuario_cli: Number(form.cliente),
-      producto_id_producto:   form.producto,
-      cantidad:               Number(form.cantidad),
-      estado:                 form.estado,
-      valor_total:            form.valorTotal,
-      direccion_pedido:       form.direccion,
-      fecha_entrega_estimada: form.fechaEstimada || null,
-      observaciones:          form.observaciones || null,
-      usuario_trab_id:        user?.id,
-    };
-
+  const handleUpdate = async (form) => {
     try {
-      // Si `editando` tiene un ID se hace PUT; de lo contrario POST.
-      if (editando) {
-        await api.put(`/pedidos/${editando}`, payload);
-      } else {
-        await api.post('/pedidos', payload);
-      }
-      // Recarga la lista completa desde el servidor para reflejar los datos
-      // definitivos (IDs generados, joins resueltos, etc.) sin manipulación local.
-      const { data } = await api.get('/pedidos');
+      await api.put(`/pedidos-proveedor/${editando.id_pedido_prov}`, {
+        estado:                 form.estado,
+        fecha_estimada: form.fechaEstimada || null,
+        observaciones:          form.observaciones || null,
+      });
+      const { data } = await api.get('/pedidos-proveedor');
       setPedidos(data);
-      closeModal();
+      setEditando(null);
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || `Error al ${editando ? 'editar' : 'crear'} pedido`);
+      showError(error.response?.data?.message || 'Error al actualizar el pedido.');
     }
+  };
+
+  const handleSave = async (payload) => {
+    const user = JSON.parse(localStorage.getItem('siape_user') || 'null');
+    await api.post('/pedidos-proveedor', { ...payload, usuario_trab_id: user?.id });
+    const { data } = await api.get('/pedidos-proveedor');
+    setPedidos(data);
+    setShowModal(false);
   };
 
   return (
     <div className={styles.page}>
       <div className={styles.topBar}>
-        <h2 className={styles.heading}>Gestión de Pedidos</h2>
+        <h2 className={styles.heading}>Pedidos a Proveedores</h2>
         <button className={styles.btnNew} onClick={() => setShowModal(true)}>
           + Nuevo Pedido
         </button>
       </div>
 
-      {/* ── Banner de error ───────────────────────────────────────────────────
-          Se muestra cuando el backend rechaza una operación, por ejemplo al
-          intentar eliminar un pedido que tiene una factura asociada (el servidor
-          devuelve el motivo en el cuerpo del error). El botón ✕ permite cerrarlo
-          manualmente antes de los 4 segundos del auto-dismiss. */}
       {errorMsg && (
         <div className={styles.errorBanner}>
           <span>{errorMsg}</span>
@@ -320,18 +468,18 @@ function Pedidos() {
         </div>
       )}
 
-      {/* ── Banner de confirmación de eliminación ────────────────────────────
-          Se monta solo cuando `confirmDelete` tiene un pedido pendiente.
-          El flujo es: el usuario abre el menú ⋮ → hace clic en "Eliminar" →
-          se guarda el pedido en `confirmDelete` → aparece este banner →
-          el usuario elige "Confirmar" (handleConfirmDelete) o "Cancelar"
-          (setConfirmDelete(null) desmonta el banner sin borrar nada). */}
       {confirmDelete && (
         <div className={styles.confirmBanner}>
-          <span>¿Eliminar el pedido <strong>#{confirmDelete.id}</strong>? Esta acción no se puede deshacer.</span>
+          <span>
+            ¿Eliminar el pedido <strong>#{confirmDelete.id_pedido_prov}</strong>? Esta acción no se puede deshacer.
+          </span>
           <div className={styles.confirmBannerActions}>
-            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>Cancelar</button>
-            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>Confirmar</button>
+            <button className={styles.confirmBannerCancel} onClick={() => setConfirmDelete(null)}>
+              Cancelar
+            </button>
+            <button className={styles.confirmBannerConfirm} onClick={handleConfirmDelete}>
+              Confirmar
+            </button>
           </div>
         </div>
       )}
@@ -341,58 +489,53 @@ function Pedidos() {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Cliente</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
+              <th>Proveedor</th>
+              <th>Trabajador</th>
               <th>Estado</th>
               <th>Valor Total</th>
-              <th>Dirección</th>
-              <th>F. Estimada</th>
-              <th>F. Real</th>
+              <th>Fecha Estimada</th>
               <th>Observaciones</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {pedidos.map((p) => (
-              <tr key={p.id}>
-                <td className={styles.mono}>{p.id}</td>
-                <td>{p.cliente}</td>
-                <td>{p.producto}</td>
-                <td>{p.cantidad}</td>
+              <tr key={p.id_pedido_prov}>
+                <td className={styles.mono}>{p.id_pedido_prov}</td>
+                <td>{p.nombre_proveedor ?? '-'}</td>
+                <td>{p.trabajador ?? '-'}</td>
                 <td>
                   <span className={`${styles.badge} ${estadoClass(p.estado)}`}>
                     {p.estado}
                   </span>
                 </td>
                 <td>{formatCOP(p.valorTotal)}</td>
-                <td className={styles.addr}>{p.direccion}</td>
                 <td>{formatDate(p.fechaEstimada)}</td>
-                <td>{formatDate(p.fechaReal)}</td>
                 <td className={styles.obs}>{p.observaciones || '-'}</td>
                 <td className={styles.menuCell}>
-                  {/* El menú de tres puntos solo se renderiza para administradores */}
                   {isAdmin() && (
                     <div className={styles.menuWrap}>
-                      {/*
-                        e.stopPropagation() es esencial: sin él, el clic en ⋮ también
-                        dispararía el listener global de 'click' registrado en el useEffect,
-                        que llama a setMenuOpen(null) y cerraría el menú recién abierto.
-                        Al detener la propagación, solo se ejecuta el toggle local.
-                        El toggle usa `menuOpen === p.id` para alternar: si el menú de
-                        este pedido ya está abierto lo cierra; si no, lo abre.
-                      */}
                       <button
                         className={styles.menuBtn}
-                        onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpen(menuOpen === p.id_pedido_prov ? null : p.id_pedido_prov);
+                        }}
                       >⋮</button>
-                      {menuOpen === p.id && (
+                      {menuOpen === p.id_pedido_prov && (
                         <div className={styles.dropdown}>
-                          <button onClick={() => openEdit(p)}>✏️ Editar</button>
+                          <button onClick={() => { setVerDetalle(p); setMenuOpen(null); }}>
+                            👁️ Ver Detalles
+                          </button>
+                          <button onClick={() => { setEditando(p); setMenuOpen(null); }}>
+                            ✏️ Editar
+                          </button>
                           <button
                             className={styles.dangerItem}
                             onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
-                          >🗑️ Eliminar</button>
+                          >
+                            🗑️ Eliminar
+                          </button>
                         </div>
                       )}
                     </div>
@@ -402,17 +545,34 @@ function Pedidos() {
             ))}
           </tbody>
         </table>
+        {pedidos.length === 0 && (
+          <p style={{ padding: '20px 16px', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>
+            No hay pedidos a proveedores registrados.
+          </p>
+        )}
       </div>
 
-      {/* El modal se monta condicionalmente para que al cerrarlo su estado
-          interno se destruya y la próxima apertura parta siempre de cero. */}
       {showModal && (
         <PedidoModal
-          onClose={closeModal}
+          onClose={() => setShowModal(false)}
           onSave={handleSave}
-          clientes={clientes}
+          proveedores={proveedores}
           productos={productos}
-          initialData={initialData}
+        />
+      )}
+
+      {verDetalle && (
+        <DetallePedidoModal
+          pedido={verDetalle}
+          onClose={() => setVerDetalle(null)}
+        />
+      )}
+
+      {editando && (
+        <EditarPedidoModal
+          pedido={editando}
+          onClose={() => setEditando(null)}
+          onSave={handleUpdate}
         />
       )}
     </div>

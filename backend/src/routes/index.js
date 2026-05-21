@@ -18,5 +18,6 @@ router.use('/trabajadores', require('./trabajadores.routes'));
 router.use('/facturas', require('./facturas.routes'));
 router.use('/pagos', require('./pagos.routes'));
 router.use('/reportes', require('./reportes.routes'));
+router.use('/pedidos-proveedor', require('./pedidos-proveedor.routes'));
 
 module.exports = router;

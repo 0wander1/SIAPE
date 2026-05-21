@@ -180,6 +180,8 @@ function Inventario() {
 
   // `confirmDelete` almacena el ítem pendiente de borrar para el banner de confirmación.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Estados para el modal de stock crítico consultado al servlet Java.
   const [stockCriticoOpen, setStockCriticoOpen]       = useState(false);
@@ -361,19 +363,19 @@ function Inventario() {
   // se elimina el registro de inventario y luego el producto asociado.
   // Invertir el orden causaría un error de integridad referencial en la base de datos.
   // Si cualquiera de las dos peticiones falla se muestra el error del backend;
-  // en ese caso el ítem puede quedar en un estado parcialmente eliminado,
-  // condición que el administrador debe resolver manualmente.
   const handleConfirmDelete = async () => {
     const item = confirmDelete;
     setConfirmDelete(null);
     try {
-      await api.delete(`/inventario/${item.id_inventario}`);
-      await api.delete(`/productos/${item.producto_id_producto}`);
+      await api.delete(`/inventario/${item.id_inventario}`, {
+        data: { producto_id_producto: item.producto_id_producto },
+      });
       // Elimina el ítem del estado local sin recargar la lista completa.
       setItems((prev) => prev.filter((i) => i.id_inventario !== item.id_inventario));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'Error al eliminar el producto o su inventario');
+      const msg = error.response?.data?.message || 'Error al eliminar el producto o su inventario';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
@@ -394,13 +396,28 @@ function Inventario() {
       setItems(data);
       setEditando(null);
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'Error al actualizar inventario');
+      const msg = error.response?.data?.message || 'Error al actualizar inventario';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <div className={styles.searchWrap}>
           <span className={styles.searchIcon}>🔍</span>

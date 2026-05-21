@@ -101,4 +101,16 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { getAll, getById, create, update, remove };
+// Retorna los proveedores asociados al producto indicado por :id.
+// Un array vacío es una respuesta 200 válida: significa que el producto existe
+// pero aún no tiene proveedores vinculados en producto_has_proveedor.
+async function getProveedores(req, res, next) {
+  try {
+    const proveedores = await productosService.getProveedores(req.params.id);
+    return res.status(200).json(proveedores);
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { getAll, getById, create, update, remove, getProveedores };

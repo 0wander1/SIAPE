@@ -272,6 +272,8 @@ function Pagos() {
 
   // `confirmDelete` almacena el pago pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // `validacionModal` lleva el estado de la consulta al servlet Java:
   // null → modal cerrado; { facturaId, loading: true } → consultando;
@@ -355,8 +357,9 @@ function Pagos() {
       await api.delete(`/pagos/${p.id_pago}`);
       setPagos((prev) => prev.filter((x) => x.id_pago !== p.id_pago));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'Error al eliminar pago');
+      const msg = error.response?.data?.message || 'Error al eliminar pago';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
@@ -382,13 +385,28 @@ function Pagos() {
       setPagos(data);
       setShowModal(false);
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'Error al registrar pago');
+      const msg = error.response?.data?.message || 'Error al registrar pago';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <div className={styles.searchWrap}>
           <span>🔍</span>

@@ -145,14 +145,27 @@ async function update(id, data) {
 // si hay registros de inventario u otras entidades con FK hacia esta bodega y la
 // restricción es ON DELETE RESTRICT, MySQL rechazará el DELETE con una excepción
 // que se propagará al controlador y luego al errorHandler global.
+// ER_ROW_IS_REFERENCED_2 es el código que lanza MySQL cuando el DELETE viola una FK
+// con ON DELETE RESTRICT. Se captura aquí para devolver un mensaje descriptivo en
+// español (409 Conflict) en lugar del críptico error de MySQL al cliente.
 async function remove(id) {
-  const [result] = await pool.query(
-    'DELETE FROM bodega WHERE id_bodega = ?',
-    [id]
-  );
-  // true → la bodega existía y fue eliminada correctamente.
-  // false → affectedRows === 0: la bodega no existía; el controlador responderá 404.
-  return result.affectedRows > 0;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM bodega WHERE id_bodega = ?',
+      [id]
+    );
+    // true → la bodega existía y fue eliminada correctamente.
+    // false → affectedRows === 0: la bodega no existía; el controlador responderá 404.
+    return result.affectedRows > 0;
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw Object.assign(
+        new Error('No se puede eliminar la bodega porque tiene productos o inventario asociado.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
 module.exports = { getAll, getById, create, update, remove };

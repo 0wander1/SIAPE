@@ -161,6 +161,8 @@ function Trabajadores() {
 
   // `confirmDelete` almacena el trabajador pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // ── Carga inicial de trabajadores ─────────────────────────────────────────
   // Reemplaza los datos mock con los reales del servidor al montar.
@@ -206,7 +208,7 @@ function Trabajadores() {
   // 1. Cierra el banner de inmediato para evitar doble clic.
   // 2. Envía DELETE /trabajadores/:id.
   // 3. Si tiene éxito, filtra el trabajador del estado local sin recargar.
-  // 4. Si falla, muestra el mensaje del backend en un alert nativo.
+  // 4. Si falla, muestra el mensaje del backend en el banner de error rojo.
   const handleConfirmDelete = async () => {
     const t = confirmDelete;
     setConfirmDelete(null);
@@ -214,8 +216,9 @@ function Trabajadores() {
       await api.delete(`/trabajadores/${t.id_usuario_trab}`);
       setTrabajadores((prev) => prev.filter((x) => x.id_usuario_trab !== t.id_usuario_trab));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'No se pudo eliminar el trabajador.');
+      const msg = error.response?.data?.message || 'No se pudo eliminar el trabajador.';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
@@ -256,6 +259,20 @@ function Trabajadores() {
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <h2 className={styles.heading}>Equipo de Trabajo</h2>
         {/* Resetea editando e initialData para garantizar modo creación */}

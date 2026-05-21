@@ -105,12 +105,26 @@ async function getById(id) {
   return resultado[0] || null;
 }
 
+// Inserta filas en producto_has_proveedor para cada elemento del array.
+// Se reutiliza tanto en create como en update para evitar duplicar la lógica.
+// `conn` es la conexión transaccional activa; todos los INSERTs deben ir en ella.
+async function insertarProductosAsociados(conn, id_proveedor, productos_asociados) {
+  for (const pa of productos_asociados) {
+    await conn.query(
+      `INSERT INTO producto_has_proveedor
+        (producto_id_producto, proveedor_id_proveedor, precio_compra, es_proveedor_principal, activo)
+       VALUES (?, ?, ?, ?, 1)`,
+      [pa.producto_id_producto, id_proveedor, pa.precio_compra ?? 0, pa.esPrincipal ? 1 : 0]
+    );
+  }
+}
+
 // Crea un nuevo proveedor con validación explícita de NIT único antes del INSERT.
 // Estrategia de validación: SELECT previo en lugar de confiar en ER_DUP_ENTRY.
 // Esto permite devolver un mensaje de error descriptivo en español (409 Conflict)
 // en lugar de propagar el críptico error de MySQL al cliente.
 async function create(data) {
-  const { nombre_proveedor, NIT, id_usuario_trab } = data;
+  const { nombre_proveedor, NIT, id_usuario_trab, productos_asociados } = data;
 
   // Se consulta si ya existe un proveedor con ese NIT. existing es el array de filas;
   // si tiene al menos un elemento el NIT está duplicado y se rechaza la creación.
@@ -126,66 +140,141 @@ async function create(data) {
     throw Object.assign(new Error('Ya existe un proveedor con ese NIT.'), { status: 409 });
   }
 
-  const [result] = await pool.query(
-    'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
-    [nombre_proveedor, NIT, id_usuario_trab]
-  );
+  // Sin productos asociados: INSERT simple sin overhead de transacción.
+  if (!productos_asociados?.length) {
+    const [result] = await pool.query(
+      'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
+      [nombre_proveedor, NIT, id_usuario_trab]
+    );
+    return getById(result.insertId);
+  }
 
-  // Se retorna el proveedor completo con el JOIN para incluir productos_asociados
-  // (vacío al crear, pero consistente con el formato que espera el front-end).
-  return getById(result.insertId);
+  // Con productos asociados: transacción que engloba el INSERT del proveedor y los
+  // INSERTs en producto_has_proveedor, garantizando que nunca quede un proveedor
+  // sin sus productos ni productos huérfanos sin proveedor padre.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
+      'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
+      [nombre_proveedor, NIT, id_usuario_trab]
+    );
+    const id_proveedor = result.insertId;
+
+    await insertarProductosAsociados(conn, id_proveedor, productos_asociados);
+
+    await conn.commit();
+    return getById(id_proveedor);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 // Actualiza dinámicamente los campos de un proveedor presentes en el body.
 // Construye el SET de la query en tiempo de ejecución filtrando contra CAMPOS_PERMITIDOS_UPDATE.
+// Si el body incluye productos_asociados, reemplaza completamente las asociaciones
+// actuales (DELETE + INSERT) dentro de la misma transacción.
 async function update(id, data) {
-  // Solo se conservan las claves del body que estén en la lista blanca,
-  // descartando campos desconocidos o restringidos que el cliente no debería modificar.
-  const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
+  // productos_asociados se extrae antes del filtrado para tratarlo por separado.
+  const { productos_asociados, ...rest } = data;
+  const campos = Object.keys(rest).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
 
-  if (campos.length === 0) {
+  if (campos.length === 0 && !productos_asociados) {
     throw Object.assign(
       new Error('No se proporcionaron campos válidos para actualizar.'),
       { status: 400 }
     );
   }
 
-  // Se genera un fragmento "columna = ?" por cada campo válido y se unen con ", ".
-  // Ejemplo con dos campos: "nombre_proveedor = ?, NIT = ?"
-  const setClause = campos.map((c) => `${c} = ?`).join(', ');
-  const valores   = campos.map((c) => data[c]);
+  // Sin productos_asociados: UPDATE simple sin transacción.
+  if (!productos_asociados) {
+    const setClause = campos.map((c) => `${c} = ?`).join(', ');
+    const valores   = campos.map((c) => rest[c]);
 
-  // Si el body incluye NIT y ese valor ya pertenece a otro proveedor, MySQL lanzará
-  // ER_DUP_ENTRY (código 'ER_DUP_ENTRY') porque la columna tiene un índice UNIQUE.
-  // mysql2 convierte ese error de MySQL en una excepción JavaScript con error.code === 'ER_DUP_ENTRY'.
-  // El error se propaga hacia el controlador vía next(error) y de ahí al errorHandler global,
-  // que devuelve su message al cliente. Para una respuesta 409 personalizada habría que
-  // capturar el error aquí con: if (err.code === 'ER_DUP_ENTRY') throw Object.assign(...)
-  const [result] = await pool.query(
-    `UPDATE proveedor SET ${setClause} WHERE id_proveedor = ?`,
-    [...valores, id]
-  );
+    // Si el body incluye NIT y ese valor ya pertenece a otro proveedor, MySQL lanzará
+    // ER_DUP_ENTRY porque la columna tiene un índice UNIQUE.
+    const [result] = await pool.query(
+      `UPDATE proveedor SET ${setClause} WHERE id_proveedor = ?`,
+      [...valores, id]
+    );
 
-  // affectedRows === 0: ninguna fila coincidió con el WHERE → el proveedor no existe.
-  // El controlador convertirá null en una respuesta 404.
-  if (result.affectedRows === 0) return null;
+    if (result.affectedRows === 0) return null;
+    return getById(id);
+  }
 
-  // Se retorna el proveedor actualizado con sus productos asociados vía getById.
-  return getById(id);
+  // Con productos_asociados: transacción que agrupa el UPDATE del proveedor y el
+  // reemplazo de sus asociaciones. Se usa DELETE + INSERT (en lugar de INSERT IGNORE)
+  // para que la lista final refleje exactamente lo que llegó en el body, sin dejar
+  // asociaciones antiguas que el cliente ya no envió.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    if (campos.length > 0) {
+      const setClause = campos.map((c) => `${c} = ?`).join(', ');
+      const valores   = campos.map((c) => rest[c]);
+      const [result]  = await conn.query(
+        `UPDATE proveedor SET ${setClause} WHERE id_proveedor = ?`,
+        [...valores, id]
+      );
+      if (result.affectedRows === 0) {
+        await conn.rollback();
+        return null;
+      }
+    } else {
+      // Solo llegan productos_asociados sin campos de proveedor: verificar que existe.
+      const [[row]] = await conn.query(
+        'SELECT id_proveedor FROM proveedor WHERE id_proveedor = ?',
+        [id]
+      );
+      if (!row) {
+        await conn.rollback();
+        return null;
+      }
+    }
+
+    await conn.query(
+      'DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?',
+      [id]
+    );
+    await insertarProductosAsociados(conn, id, productos_asociados);
+
+    await conn.commit();
+    return getById(id);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 // Elimina el proveedor por su PK.
-// Si la tabla "producto_has_proveedor" tiene ON DELETE RESTRICT sobre la FK
-// proveedor_id_proveedor, MySQL rechazará el DELETE con un error de integridad
-// referencial que se propagará como excepción al controlador y luego al errorHandler.
+// ER_ROW_IS_REFERENCED_2 es el código que lanza MySQL cuando el DELETE viola una FK
+// con ON DELETE RESTRICT. Se captura aquí para devolver un mensaje descriptivo en
+// español (409 Conflict) en lugar del críptico error de MySQL al cliente.
 async function remove(id) {
-  const [result] = await pool.query(
-    'DELETE FROM proveedor WHERE id_proveedor = ?',
-    [id]
-  );
-  // true → el proveedor existía y fue eliminado.
-  // false → affectedRows === 0: el proveedor no existía; el controlador responderá 404.
-  return result.affectedRows > 0;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM proveedor WHERE id_proveedor = ?',
+      [id]
+    );
+    // true → el proveedor existía y fue eliminado.
+    // false → affectedRows === 0: el proveedor no existía; el controlador responderá 404.
+    return result.affectedRows > 0;
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw Object.assign(
+        new Error('No se puede eliminar el proveedor porque tiene pedidos asociados.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
 module.exports = { getAll, getById, create, update, remove };

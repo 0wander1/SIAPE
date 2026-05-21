@@ -116,12 +116,25 @@ async function update(id, data) {
 }
 
 // Elimina el registro por PK. Retorna true si se eliminó, false si no existía.
+// ER_ROW_IS_REFERENCED_2 es el código que lanza MySQL cuando el DELETE viola una FK
+// con ON DELETE RESTRICT. Se captura aquí para devolver un mensaje descriptivo en
+// español (409 Conflict) en lugar del críptico error de MySQL al cliente.
 async function remove(id) {
-  const [result] = await pool.query(
-    'DELETE FROM inventario WHERE id_inventario = ?',
-    [id]
-  );
-  return result.affectedRows > 0;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM inventario WHERE id_inventario = ?',
+      [id]
+    );
+    return result.affectedRows > 0;
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw Object.assign(
+        new Error('No se puede eliminar el producto porque tiene registros asociados.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
 // Procesa un array de filas provenientes de un Excel convertido a JSON por el front-end.
@@ -276,4 +289,32 @@ async function cargaMasiva(filas) {
   return { creados, actualizados, errores };
 }
 
-module.exports = { getAll, getById, create, update, remove, cargaMasiva };
+// Elimina el producto y su registro de inventario en una sola transacción.
+// El producto se borra primero para que el DELETE de inventario no quede huérfano;
+// si el producto tiene FKs activas en otras tablas MySQL lanzará ER_ROW_IS_REFERENCED_2
+// antes de que se toque inventario, y el rollback dejará ambas filas intactas.
+async function removeConProducto(id_inventario, id_producto) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.query('DELETE FROM producto  WHERE id_producto   = ?', [id_producto]);
+    await conn.query('DELETE FROM inventario WHERE id_inventario = ?', [id_inventario]);
+
+    await conn.commit();
+    return true;
+  } catch (error) {
+    await conn.rollback();
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw Object.assign(
+        new Error('No se puede eliminar el producto porque tiene registros asociados.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+module.exports = { getAll, getById, create, update, remove, removeConProducto, cargaMasiva };

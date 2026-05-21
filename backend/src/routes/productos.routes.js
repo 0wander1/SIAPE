@@ -11,6 +11,12 @@ const router = Router();
 // No requiere parámetros; un array vacío es una respuesta 200 válida.
 router.get('/',       verifyToken, productosController.getAll);
 
+// GET /api/productos/:id/proveedores
+// Devuelve los proveedores asociados al producto con la PK indicada, incluyendo
+// precio de compra, tiempo de entrega y si es proveedor principal.
+// Se define antes de /:id para que Express no interprete "proveedores" como un :id.
+router.get('/:id/proveedores', verifyToken, productosController.getProveedores);
+
 // GET /api/productos/:id
 // Devuelve un producto específico por su PK. Responde 404 si no existe.
 // Express captura el valor dinámico ":id" y lo expone en req.params.id.

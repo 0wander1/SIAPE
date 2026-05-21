@@ -37,14 +37,23 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario, nitError, i
   // Añade el producto seleccionado al array form.productos.
   // Evita duplicados comprobando si el nombre ya está en el array antes de agregarlo.
   const addProducto = () => {
-    if (!productoSel || form.productos.includes(productoSel)) return;
-    setForm({ ...form, productos: [...form.productos, productoSel] });
+    if (!productoSel || form.productos.some((x) => x.nombre === productoSel)) return;
+    setForm({ ...form, productos: [...form.productos, { nombre: productoSel, esPrincipal: false }] });
     setProductoSel('');
   };
 
-  // Elimina un producto de la lista filtrando por nombre.
-  const removeProducto = (p) => {
-    setForm({ ...form, productos: form.productos.filter((x) => x !== p) });
+  // Elimina un producto de la lista filtrando por item.nombre.
+  const removeProducto = (nombre) => {
+    setForm({ ...form, productos: form.productos.filter((x) => x.nombre !== nombre) });
+  };
+
+  const togglePrincipal = (nombre) => {
+    setForm({
+      ...form,
+      productos: form.productos.map((x) =>
+        x.nombre === nombre ? { ...x, esPrincipal: !x.esPrincipal } : x
+      ),
+    });
   };
 
   const handleSubmit = (e) => {
@@ -129,10 +138,18 @@ function ProveedorModal({ onClose, onSave, trabajadores, inventario, nitError, i
           </div>
           {form.productos.length > 0 && (
             <div className={styles.productosList}>
-              {form.productos.map((p) => (
-                <span key={p} className={styles.productoTag}>
-                  {p}
-                  <button type='button' onClick={() => removeProducto(p)}>✕</button>
+              {form.productos.map((item) => (
+                <span key={item.nombre} className={styles.productoTag}>
+                  {item.nombre}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                    <input
+                      type='checkbox'
+                      checked={item.esPrincipal}
+                      onChange={() => togglePrincipal(item.nombre)}
+                    />
+                    Principal
+                  </label>
+                  <button type='button' onClick={() => removeProducto(item.nombre)}>✕</button>
                 </span>
               ))}
             </div>
@@ -178,6 +195,8 @@ function Proveedores() {
 
   // `confirmDelete` almacena el proveedor pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // ── Carga inicial de datos ────────────────────────────────────────────────
   // Los tres recursos se solicitan en paralelo al montar el componente.
@@ -222,7 +241,8 @@ function Proveedores() {
       trabajador: String(p.id_usuario_trab ?? ''),
       productos:  (p.productos_asociados ?? []).map((pa) => {
         const prod = inventario.find((i) => (i.id_producto ?? i.id) == pa.producto_id_producto);
-        return prod ? (prod.nombre_producto ?? prod.nombre) : String(pa.producto_id_producto);
+        const nombre = prod ? (prod.nombre_producto ?? prod.nombre) : String(pa.producto_id_producto);
+        return { nombre, esPrincipal: pa.esPrincipal ?? false };
       }),
     });
     setEditando(p.id_proveedor);
@@ -246,7 +266,7 @@ function Proveedores() {
   // 2. Envía DELETE /proveedores/:id.
   // 3. Si tiene éxito, elimina el proveedor del estado local sin recargar la lista.
   // 4. Si falla (p. ej. relaciones activas en la base de datos), muestra el
-  //    mensaje del backend en un alert nativo.
+  //    mensaje del backend en el banner de error rojo con auto-cierre.
   const handleConfirmDelete = async () => {
     const p = confirmDelete;
     setConfirmDelete(null);
@@ -254,27 +274,47 @@ function Proveedores() {
       await api.delete(`/proveedores/${p.id_proveedor}`);
       setProveedores((prev) => prev.filter((x) => x.id_proveedor !== p.id_proveedor));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'No se pudo eliminar el proveedor.');
+      const msg = error.response?.data?.message || 'No se pudo eliminar el proveedor.';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
   // ── Guardar proveedor (crear o editar) ────────────────────────────────────
   const handleSave = async (form) => {
     setNitError('');
+
+    // form.productos es un array de nombres de producto (strings). Se mapea a
+    // objetos { producto_id_producto } buscando el ID en el estado `inventario`.
+    // Los nombres que no tienen match en inventario se descartan con filter(Boolean).
+    const productos_asociados = form.productos
+      .map(({ nombre, esPrincipal }) => {
+        const prod = inventario.find(
+          (i) => (i.nombre_producto ?? i.nombre) === nombre
+        );
+        return prod ? { producto_id_producto: prod.id_producto ?? prod.id, esPrincipal } : null;
+      })
+      .filter(Boolean);
+
     try {
       if (editando) {
-        await api.put(`/proveedores/${editando}`, {
+        const body = {
           nombre_proveedor: form.nombre,
           NIT:              form.nit,
           id_usuario_trab:  Number(form.trabajador) || null,
-        });
+          productos_asociados,
+        };
+        console.log('[Proveedores] PUT body:', body);
+        await api.put(`/proveedores/${editando}`, body);
       } else {
-        await api.post('/proveedores', {
+        const body = {
           nombre_proveedor: form.nombre,
           NIT:              form.nit,
           id_usuario_trab:  Number(form.trabajador) || null,
-        });
+          productos_asociados,
+        };
+        console.log('[Proveedores] POST body:', body);
+        await api.post('/proveedores', body);
       }
       // Recarga la lista completa para reflejar los cambios con datos del servidor.
       const { data } = await api.get('/proveedores');
@@ -297,6 +337,20 @@ function Proveedores() {
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <div className={styles.searchWrap}>
           <span>🔍</span>

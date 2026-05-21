@@ -151,13 +151,43 @@ async function remove(id) {
     );
   }
 
-  const [result] = await pool.query(
-    'DELETE FROM producto WHERE id_producto = ?',
-    [id]
-  );
-  // true → el producto existía y fue eliminado correctamente.
-  // false → affectedRows === 0, el producto no existía; el controlador responderá 404.
-  return result.affectedRows > 0;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM producto WHERE id_producto = ?',
+      [id]
+    );
+    // true → el producto existía y fue eliminado correctamente.
+    // false → affectedRows === 0, el producto no existía; el controlador responderá 404.
+    return result.affectedRows > 0;
+  } catch (error) {
+    // ER_ROW_IS_REFERENCED_2 cubre FKs adicionales no verificadas en el SELECT previo,
+    // como facturas u otras tablas que referencien producto_id_producto.
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      throw Object.assign(
+        new Error('No se puede eliminar el producto porque tiene facturas o pedidos asociados.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
-module.exports = { getAll, getById, create, update, remove };
+// Retorna los proveedores asociados a un producto consultando la tabla intermedia
+// producto_has_proveedor. El JOIN a proveedor permite devolver el nombre junto con
+// las condiciones comerciales (precio, plazo, si es principal) de cada relación.
+async function getProveedores(id) {
+  const [rows] = await pool.query(
+    `SELECT p.id_proveedor,
+            p.nombre_proveedor,
+            php.precio_compra,
+            php.tiempo_entrega_dias,
+            php.es_proveedor_principal
+     FROM producto_has_proveedor php
+     JOIN proveedor p ON p.id_proveedor = php.proveedor_id_proveedor
+     WHERE php.producto_id_producto = ?`,
+    [id]
+  );
+  return rows;
+}
+
+module.exports = { getAll, getById, create, update, remove, getProveedores };

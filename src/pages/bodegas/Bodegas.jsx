@@ -154,6 +154,8 @@ function Bodegas() {
 
   // `confirmDelete` almacena la bodega pendiente de eliminar.
   const [confirmDelete, setConfirmDelete] = useState(null);
+  // `errorMsg` alimenta el banner de error rojo con auto-cierre.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // ── Carga inicial de datos ────────────────────────────────────────────────
   // `bodegas` y `trabajadores` se solicitan en paralelo al montar.
@@ -212,7 +214,7 @@ function Bodegas() {
   // 1. Cierra el banner de inmediato para evitar doble clic.
   // 2. Envía DELETE /bodegas/:id.
   // 3. Si tiene éxito, filtra la bodega del estado local sin recargar la lista.
-  // 4. Si falla, muestra el mensaje del backend en un alert nativo.
+  // 4. Si falla, muestra el mensaje del backend en el banner de error rojo.
   const handleConfirmDelete = async () => {
     const b = confirmDelete;
     setConfirmDelete(null);
@@ -220,8 +222,9 @@ function Bodegas() {
       await api.delete(`/bodegas/${b.id_bodega}`);
       setBodegas((prev) => prev.filter((x) => x.id_bodega !== b.id_bodega));
     } catch (error) {
-      console.error(error);
-      alert(error.response?.data?.message || 'No se pudo eliminar la bodega.');
+      const msg = error.response?.data?.message || 'No se pudo eliminar la bodega.';
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
@@ -277,6 +280,20 @@ function Bodegas() {
 
   return (
     <div className={styles.page}>
+      {errorMsg && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626',
+          borderRadius: 8, padding: '10px 16px', fontSize: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg('')}
+            style={{ background: 'none', color: '#dc2626', fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >✕</button>
+        </div>
+      )}
+
       <div className={styles.topBar}>
         <div className={styles.searchWrap}>
           <span>🔍</span>
