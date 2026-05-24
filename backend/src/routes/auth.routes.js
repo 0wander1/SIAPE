@@ -16,8 +16,7 @@ const router = Router();
 // es más seguro que enviarlas en la URL (donde quedarían en logs del servidor y
 // en el historial del navegador, como ocurriría con un GET).
 // Cuando la petición llega, Express delega el control a authController.login.
-router.post('/login', authController.login);
+router.post('/login',       authController.login);
+router.post('/verify-code', authController.verifyCode);
 
-// Se exporta el router para que src/routes/index.js pueda montarlo bajo "/auth",
-// haciendo que la ruta completa quede como POST /api/auth/login.
 module.exports = router;

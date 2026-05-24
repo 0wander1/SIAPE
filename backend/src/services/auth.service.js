@@ -21,7 +21,7 @@ async function findUserByUsername(userName) {
   // Se seleccionan solo las columnas necesarias para autenticar: PK, nombre de usuario,
   // hash de contraseña y cargo (rol). No se trae información sensible innecesaria.
   const [rows] = await pool.query(
-    'SELECT id_usuario_trab, user_name, password_hash, cargo FROM usuario_trab WHERE user_name = ?',
+    'SELECT id_usuario_trab, user_name, password_hash, cargo, correo FROM usuario_trab WHERE user_name = ?',
     [userName]
   );
   // rows es un array de objetos; rows[0] es el primer (y único) resultado esperado.
@@ -80,10 +80,62 @@ async function login(userName, password) {
   // si se compromete, cualquiera podría forjar tokens válidos.
   const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
-  // Se retornan el token (para enviarlo al cliente) y el payload como objeto "user"
-  // (para que el controlador lo incluya en la respuesta JSON sin decodificar el token).
+  // Se retornan el token, el payload como objeto "user" y el correo del usuario
+  // para que el controlador pueda enviar el código de verificación sin otra consulta a BD.
+  return { token, user: payload, correo: user.correo };
+}
+
+// Busca un usuario por su PK y emite un JWT. Lo usa el handler verifyCode del
+// controlador una vez que el código de verificación ha sido validado, para no
+// tener que volver a pedir user_name y password al cliente.
+async function generateTokenForUser(id) {
+  const [rows] = await pool.query(
+    'SELECT id_usuario_trab, user_name, cargo FROM usuario_trab WHERE id_usuario_trab = ?',
+    [id]
+  );
+  const user = rows[0];
+  if (!user) throw Object.assign(new Error('Usuario no encontrado.'), { status: 404 });
+
+  const payload = { id: user.id_usuario_trab, user_name: user.user_name, cargo: user.cargo };
+  const token   = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
   return { token, user: payload };
 }
 
+// ── Verificación en dos pasos ────────────────────────────────────────────────
+
+// Almacén en memoria: clave = id_usuario_trab, valor = { codigo, expira }.
+// Se usa un Map y no la BD para evitar escrituras innecesarias y porque los
+// códigos son efímeros: no importa si se pierden al reiniciar el proceso.
+const codigosTemporales = new Map();
+
+// Devuelve un número aleatorio de 6 dígitos como string con ceros a la izquierda.
+// Math.random() produce [0, 1); multiplicar por 1_000_000 da [0, 1000000).
+// padStart garantiza exactamente 6 caracteres (p. ej. "004271").
+function generateCode() {
+  return String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
+}
+
+function saveCode(id, codigo) {
+  codigosTemporales.set(id, {
+    codigo,
+    expira: Date.now() + 10 * 60 * 1000,
+  });
+}
+
+// Retorna true si el código existe, no ha expirado y coincide; false en cualquier
+// otro caso. Si la validación pasa, elimina la entrada para que el código sea
+// de un solo uso y no pueda reutilizarse tras el login exitoso.
+function verifyCode(id, codigo) {
+  const entry = codigosTemporales.get(id);
+  if (!entry) return false;
+  if (Date.now() > entry.expira) {
+    codigosTemporales.delete(id);
+    return false;
+  }
+  if (entry.codigo !== codigo) return false;
+  codigosTemporales.delete(id);
+  return true;
+}
+
 // Solo se exporta "login"; "findUserByUsername" permanece privada al módulo.
-module.exports = { login };
+module.exports = { login, generateCode, saveCode, verifyCode, generateTokenForUser };
