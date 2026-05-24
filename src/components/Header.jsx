@@ -45,6 +45,82 @@ function PerfilModal({ user, onClose }) {
   );
 }
 
+function PerfilNegocioModal({ onClose }) {
+  const [form, setForm]       = useState({ nombre: '', nit: '', direccion: '', telefono: '', correo: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(false);
+  const [msg, setMsg]         = useState(null); // { text, ok }
+
+  useEffect(() => {
+    api.get('/negocio')
+      .then(({ data }) => {
+        setForm({
+          nombre:    data.nombre    || '',
+          nit:       data.nit       || '',
+          direccion: data.direccion || '',
+          telefono:  data.telefono  || '',
+          correo:    data.correo    || '',
+        });
+      })
+      .catch(() => setMsg({ text: 'No se pudo cargar la información del negocio.', ok: false }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMsg(null);
+    setSaving(true);
+    try {
+      await api.put('/negocio', form);
+      setMsg({ text: 'Información actualizada correctamente.', ok: true });
+    } catch (err) {
+      setMsg({ text: err.response?.data?.message || 'Error al guardar los cambios.', ok: false });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (key) => ({
+    value: form[key],
+    onChange: (e) => setForm((f) => ({ ...f, [key]: e.target.value })),
+  });
+
+  return (
+    <Modal title='Perfil del Negocio' onClose={onClose} size='sm'>
+      {loading ? (
+        <p style={{ textAlign: 'center', color: '#6b7280' }}>Cargando...</p>
+      ) : (
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <FormField label='Nombre del negocio' required>
+            <Input {...field('nombre')} required />
+          </FormField>
+          <FormField label='NIT' required>
+            <Input {...field('nit')} required />
+          </FormField>
+          <FormField label='Dirección'>
+            <Input {...field('direccion')} />
+          </FormField>
+          <FormField label='Teléfono'>
+            <Input {...field('telefono')} />
+          </FormField>
+          <FormField label='Correo'>
+            <Input type='email' {...field('correo')} />
+          </FormField>
+          {msg && (
+            <p style={{ margin: 0, fontSize: 13, color: msg.ok ? '#16a34a' : '#dc2626' }}>
+              {msg.text}
+            </p>
+          )}
+          <FormActions>
+            <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
+            <BtnPrimary type='submit' disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</BtnPrimary>
+          </FormActions>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
 // Modal para que el usuario cambie su propia contraseña.
 // Gestiona su propio estado de formulario, errores y estado de envío.
 function CambiarPasswordModal({ user, onClose }) {
@@ -210,6 +286,7 @@ function Header() {
               <div className={styles.profileDropdown}>
                 <button onClick={() => openModal('perfil')}>👤 Ver perfil</button>
                 <button onClick={() => openModal('password')}>🔑 Cambiar contraseña</button>
+                <button onClick={() => openModal('negocio')}>🏢 Perfil del negocio</button>
                 <hr className={styles.divider} />
                 <button className={styles.logoutItem} onClick={handleLogout}>⎋ Cerrar sesión</button>
               </div>
@@ -223,6 +300,7 @@ function Header() {
           lo que desmonta el modal y limpia su estado interno. */}
       {modal === 'perfil'   && <PerfilModal          user={user} onClose={() => setModal(null)} />}
       {modal === 'password' && <CambiarPasswordModal user={user} onClose={() => setModal(null)} />}
+      {modal === 'negocio'  && <PerfilNegocioModal          onClose={() => setModal(null)} />}
     </>
   );
 }

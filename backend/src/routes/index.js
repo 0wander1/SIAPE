@@ -19,5 +19,6 @@ router.use('/facturas', require('./facturas.routes'));
 router.use('/pagos', require('./pagos.routes'));
 router.use('/reportes', require('./reportes.routes'));
 router.use('/pedidos-proveedor', require('./pedidos-proveedor.routes'));
+router.use('/negocio',          require('./negocio.routes'));
 
 module.exports = router;
