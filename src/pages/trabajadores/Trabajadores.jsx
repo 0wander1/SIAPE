@@ -23,7 +23,7 @@ import styles from './Trabajadores.module.css';
 // a menos que quiera cambiarla explícitamente.
 const emptyForm = {
   nombre: '', cargo: '', direccion: '', turno: 'Mañana',
-  celular: '', username: '', password: '', confirmPassword: '',
+  celular: '', correo: '', username: '', password: '', confirmPassword: '',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +112,13 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
           </FormField>
         </FormRow>
 
+        <FormRow>
+          <FormField label='Correo Electrónico'>
+            <Input type='email' name='correo' value={form.correo} onChange={handleChange}
+              placeholder='correo@ejemplo.com' />
+          </FormField>
+        </FormRow>
+
         {/*
           Campos de contraseña con comportamiento diferente según el modo:
           - Creación: obligatorios (required={!isEdit}), placeholder estándar.
@@ -194,6 +201,7 @@ function Trabajadores() {
       direccion:       t.direccion ?? '',
       turno:           t.turno ?? 'Mañana',
       celular:         t.celular ?? '',
+      correo:          t.correo ?? '',
       username:        t.user_name ?? '',
       password:        '',
       confirmPassword: '',
@@ -228,10 +236,12 @@ function Trabajadores() {
     // Los opcionales se convierten a null si están vacíos para que el backend
     // los trate como ausentes y no los guarde como strings vacíos.
     const base = {
+      nombre:    form.nombre,
       cargo:     form.cargo,
       direccion: form.direccion || null,
       turno:     form.turno    || null,
       celular:   form.celular  || null,
+      correo:    form.correo   || null,
       user_name: form.username,
     };
     try {

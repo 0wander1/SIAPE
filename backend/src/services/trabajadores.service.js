@@ -12,18 +12,21 @@ const { pool } = require('../config/db');
 //     no permite revertir el hash, pero es un dato de seguridad innecesario de exponer.
 // Al enumerar las columnas explícitamente aquí, si la tabla añade columnas sensibles
 // en el futuro (p. ej. tokens de recuperación) tampoco se expondrán accidentalmente.
-const COLUMNAS_PUBLICAS = 'id_usuario_trab, cargo, direccion, turno, celular, user_name';
+const COLUMNAS_PUBLICAS = 'ut.id_usuario_trab, ut.cargo, ut.direccion, ut.turno, ut.celular, ut.correo, ut.user_name, u.nombre_usuario AS nombre';
 
 // Lista blanca de columnas de perfil que pueden modificarse en el UPDATE dinámico.
 // password_hash y salt quedan fuera deliberadamente: el cambio de contraseña tiene
 // su propio flujo de verificación separado dentro del mismo método update().
-const CAMPOS_PERMITIDOS_UPDATE = ['cargo', 'direccion', 'turno', 'celular', 'user_name'];
+const CAMPOS_PERMITIDOS_UPDATE = ['cargo', 'direccion', 'turno', 'celular', 'correo', 'user_name'];
 
 // Retorna todos los trabajadores seleccionando solo COLUMNAS_PUBLICAS.
 // ORDER BY DESC muestra primero el trabajador más recientemente creado.
 async function getAll() {
   const [rows] = await pool.query(
-    `SELECT ${COLUMNAS_PUBLICAS} FROM usuario_trab ORDER BY id_usuario_trab DESC`
+    `SELECT ${COLUMNAS_PUBLICAS}
+     FROM usuario_trab ut
+     JOIN usuario u ON u.id_usuario = ut.id_usuario_trab
+     ORDER BY ut.id_usuario_trab DESC`
   );
   return rows;
 }
@@ -33,7 +36,10 @@ async function getAll() {
 // para que el controlador genere una respuesta 404 sin lógica adicional.
 async function getById(id) {
   const [rows] = await pool.query(
-    `SELECT ${COLUMNAS_PUBLICAS} FROM usuario_trab WHERE id_usuario_trab = ?`,
+    `SELECT ${COLUMNAS_PUBLICAS}
+     FROM usuario_trab ut
+     JOIN usuario u ON u.id_usuario = ut.id_usuario_trab
+     WHERE ut.id_usuario_trab = ?`,
     [id]
   );
   return rows[0] || null;
@@ -42,7 +48,7 @@ async function getById(id) {
 // Crea un trabajador hasheando primero la contraseña y luego ejecutando una
 // transacción de dos inserciones para mantener la coherencia entre tablas.
 async function create(data) {
-  const { cargo, direccion, turno, celular, user_name, password } = data;
+  const { nombre, cargo, direccion, turno, celular, correo, user_name, password } = data;
 
   // --- Generación del hash de contraseña con bcrypt ---
   // bcrypt.genSalt(10) genera una sal aleatoria con factor de coste 10.
@@ -76,7 +82,7 @@ async function create(data) {
     // conn.execute() (vs conn.query()) usa siempre PreparedStatement compilado en el servidor.
     const [usuarioResult] = await conn.execute(
       'INSERT INTO usuario (nombre_usuario) VALUES (?)',
-      [user_name]
+      [nombre ?? user_name]
     );
     // insertId es la PK autoincremental generada para la fila de "usuario".
     // Este mismo id se usará como PK de "usuario_trab", vinculando ambas tablas.
@@ -90,9 +96,9 @@ async function create(data) {
     // password_hash y salt se almacenan aquí; la contraseña original (password) NO.
     await conn.execute(
       `INSERT INTO usuario_trab
-        (id_usuario_trab, cargo, direccion, turno, celular, user_name, password_hash, salt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [idUsuario, cargo, direccion ?? null, turno ?? null, celular ?? null, user_name, password_hash, salt]
+        (id_usuario_trab, cargo, direccion, turno, celular, correo, user_name, password_hash, salt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [idUsuario, cargo, direccion ?? null, turno ?? null, celular ?? null, correo ?? null, user_name, password_hash, salt]
     );
 
     // commit() persiste ambos INSERTs de forma atómica. Si llegamos aquí sin excepción,
@@ -181,29 +187,40 @@ async function update(id, data) {
   // Se filtran los campos del body contra CAMPOS_PERMITIDOS_UPDATE para construir
   // el SET dinámico. password_hash y salt no están en la lista blanca, por lo que
   // no pueden ser modificados desde este flujo aunque el cliente los envíe.
+  const { nombre } = data;
   const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
 
-  if (campos.length === 0) {
+  if (!nombre && campos.length === 0) {
     throw Object.assign(
       new Error('No se proporcionaron campos válidos para actualizar.'),
       { status: 400 }
     );
   }
 
-  // Construcción del SET dinámico: cada campo válido genera un fragmento "col = ?".
-  // Ejemplo con dos campos: "cargo = ?, turno = ?"
-  const setClause = campos.map((c) => `${c} = ?`).join(', ');
-  const valores   = campos.map((c) => data[c]);
+  if (nombre !== undefined) {
+    await pool.query(
+      'UPDATE usuario SET nombre_usuario = ? WHERE id_usuario = ?',
+      [nombre, id]
+    );
+  }
 
-  // El spread [...valores, id] coloca los valores del SET primero y el id del WHERE al
-  // final, respetando el orden de los "?" en la query construida.
-  const [result] = await pool.query(
-    `UPDATE usuario_trab SET ${setClause} WHERE id_usuario_trab = ?`,
-    [...valores, id]
-  );
+  if (campos.length > 0) {
+    // Construcción del SET dinámico: cada campo válido genera un fragmento "col = ?".
+    // Ejemplo con dos campos: "cargo = ?, turno = ?"
+    const setClause = campos.map((c) => `${c} = ?`).join(', ');
+    const valores   = campos.map((c) => data[c]);
 
-  // affectedRows === 0: el trabajador con ese id no existe en BD → null → 404.
-  if (result.affectedRows === 0) return null;
+    // El spread [...valores, id] coloca los valores del SET primero y el id del WHERE al
+    // final, respetando el orden de los "?" en la query construida.
+    const [result] = await pool.query(
+      `UPDATE usuario_trab SET ${setClause} WHERE id_usuario_trab = ?`,
+      [...valores, id]
+    );
+
+    // affectedRows === 0: el trabajador con ese id no existe en BD → null → 404.
+    if (result.affectedRows === 0) return null;
+  }
+
   return getById(id);
 }
 
