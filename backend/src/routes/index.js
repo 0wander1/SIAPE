@@ -20,5 +20,6 @@ router.use('/pagos', require('./pagos.routes'));
 router.use('/reportes', require('./reportes.routes'));
 router.use('/pedidos-proveedor', require('./pedidos-proveedor.routes'));
 router.use('/negocio',          require('./negocio.routes'));
+router.use('/pqrs',             require('./pqrs.routes'));
 
 module.exports = router;

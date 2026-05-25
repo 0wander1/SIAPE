@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from './Modal.jsx';
-import FormField, { Input, FormActions, BtnPrimary, BtnSecondary } from './FormField.jsx';
+import FormField, { Input, Select, Textarea, FormActions, BtnPrimary, BtnSecondary } from './FormField.jsx';
 import api from '../services/api.js';
 import styles from './Header.module.css';
 
@@ -117,6 +117,70 @@ function PerfilNegocioModal({ onClose }) {
           </FormActions>
         </form>
       )}
+    </Modal>
+  );
+}
+
+function PQRSModal({ onClose }) {
+  const [form, setForm]     = useState({ tipo: 'Petición', asunto: '', descripcion: '' });
+  const [msg, setMsg]       = useState(null); // { text, ok }
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMsg(null);
+    setSending(true);
+    try {
+      await api.post('/pqrs', form);
+      setMsg({ text: 'PQRS enviado correctamente.', ok: true });
+      setForm({ tipo: 'Petición', asunto: '', descripcion: '' });
+    } catch (err) {
+      setMsg({ text: err.response?.data?.message || 'Error al enviar el PQRS.', ok: false });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal title='Enviar PQRS' onClose={onClose} size='sm'>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <FormField label='Tipo' required>
+          <Select
+            value={form.tipo}
+            onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
+            required
+          >
+            <option value='Petición'>Petición</option>
+            <option value='Queja'>Queja</option>
+            <option value='Reclamo'>Reclamo</option>
+            <option value='Sugerencia'>Sugerencia</option>
+          </Select>
+        </FormField>
+        <FormField label='Asunto' required>
+          <Input
+            value={form.asunto}
+            onChange={(e) => setForm((f) => ({ ...f, asunto: e.target.value }))}
+            required
+          />
+        </FormField>
+        <FormField label='Descripción' required>
+          <Textarea
+            rows={4}
+            value={form.descripcion}
+            onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+            required
+          />
+        </FormField>
+        {msg && (
+          <p style={{ margin: 0, fontSize: 13, color: msg.ok ? '#16a34a' : '#dc2626' }}>
+            {msg.text}
+          </p>
+        )}
+        <FormActions>
+          <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
+          <BtnPrimary type='submit' disabled={sending}>{sending ? 'Enviando...' : 'Enviar'}</BtnPrimary>
+        </FormActions>
+      </form>
     </Modal>
   );
 }
@@ -287,6 +351,7 @@ function Header() {
                 <button onClick={() => openModal('perfil')}>👤 Ver perfil</button>
                 <button onClick={() => openModal('password')}>🔑 Cambiar contraseña</button>
                 <button onClick={() => openModal('negocio')}>🏢 Perfil del negocio</button>
+                <button onClick={() => openModal('pqrs')}>📝 PQRS</button>
                 <hr className={styles.divider} />
                 <button className={styles.logoutItem} onClick={handleLogout}>⎋ Cerrar sesión</button>
               </div>
@@ -301,6 +366,7 @@ function Header() {
       {modal === 'perfil'   && <PerfilModal          user={user} onClose={() => setModal(null)} />}
       {modal === 'password' && <CambiarPasswordModal user={user} onClose={() => setModal(null)} />}
       {modal === 'negocio'  && <PerfilNegocioModal          onClose={() => setModal(null)} />}
+      {modal === 'pqrs'     && <PQRSModal                   onClose={() => setModal(null)} />}
     </>
   );
 }

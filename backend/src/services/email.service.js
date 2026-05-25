@@ -1,19 +1,19 @@
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  port: 587,
-  secure: false,
-  requireTLS: true,
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-});
-
 async function sendVerificationCode(correo, codigo) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_PASS,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+  });
+
   try {
     await transporter.sendMail({
       from: `"SIAPE" <${process.env.GMAIL_USER}>`,

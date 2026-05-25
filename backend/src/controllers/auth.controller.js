@@ -16,15 +16,17 @@ async function login(req, res, next) {
     const codigo = authService.generateCode();
     authService.saveCode(result.user.id, codigo);
 
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout enviando correo')), 15000)
-    );
-    await Promise.race([sendVerificationCode(result.correo, codigo), timeout]);
-
-    return res.status(200).json({
+    res.status(200).json({
       message: 'Código enviado a tu correo.',
       userId: result.user.id,
     });
+
+    try {
+      await sendVerificationCode(result.correo, codigo);
+      console.log('[login] Correo enviado exitosamente');
+    } catch (emailError) {
+      console.error('[login] Error enviando correo:', emailError);
+    }
   } catch (error) {
     next(error);
   }
