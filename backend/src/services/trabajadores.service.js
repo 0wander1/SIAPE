@@ -108,9 +108,14 @@ async function create(data) {
     // Se retorna el trabajador con COLUMNAS_PUBLICAS: sin password_hash ni salt.
     return getById(idUsuario);
   } catch (err) {
-    // Si cualquier INSERT falla (user_name duplicado, FK inválida, etc.) el rollback
-    // revierte ambas operaciones, evitando que quede una fila huérfana en "usuario".
+    // Si cualquier INSERT falla el rollback revierte ambas operaciones,
+    // evitando que quede una fila huérfana en "usuario".
     await conn.rollback();
+    if (err.code === 'ER_DUP_ENTRY') {
+      const error = new Error('El nombre de usuario ya está en uso.');
+      error.status = 409;
+      throw error;
+    }
     throw err;
   } finally {
     // finally garantiza que la conexión se devuelva al pool tanto en éxito como en error.

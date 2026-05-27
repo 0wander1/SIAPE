@@ -29,7 +29,7 @@ const emptyForm = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal de creación / edición de trabajador
 // ─────────────────────────────────────────────────────────────────────────────
-function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
+function TrabajadorModal({ onClose, onSave, initialData, isEdit, userNameError }) {
   const [form, setForm] = useState(initialData ?? emptyForm);
   // `error` muestra mensajes de validación de contraseña dentro del modal.
   const [error, setError] = useState('');
@@ -140,6 +140,8 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit }) {
 
         {/* Mensaje de error de validación de contraseñas; se limpia en cada cambio */}
         {error && <div className={styles.errorMsg}>{error}</div>}
+        {/* Username duplicado (HTTP 409 del backend); se muestra sin cerrar el modal */}
+        {userNameError && <div className={styles.errorMsg}>{userNameError}</div>}
 
         <FormActions>
           <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
@@ -170,6 +172,8 @@ function Trabajadores() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   // `errorMsg` alimenta el banner de error rojo con auto-cierre.
   const [errorMsg, setErrorMsg] = useState('');
+  // `userNameError` contiene el mensaje cuando el backend devuelve HTTP 409 por username duplicado.
+  const [userNameError, setUserNameError] = useState('');
 
   // ── Carga inicial de trabajadores ─────────────────────────────────────────
   // Reemplaza los datos mock con los reales del servidor al montar.
@@ -186,6 +190,7 @@ function Trabajadores() {
     setShowModal(false);
     setEditando(null);
     setInitialData(null);
+    setUserNameError('');
   };
 
   // Normaliza los campos del trabajador antes de pasarlos al formulario:
@@ -232,6 +237,7 @@ function Trabajadores() {
 
   // ── Guardar trabajador (crear o editar) ───────────────────────────────────
   const handleSave = async (form) => {
+    setUserNameError('');
     // Campos comunes a creación y edición.
     // Los opcionales se convierten a null si están vacíos para que el backend
     // los trate como ausentes y no los guarde como strings vacíos.
@@ -262,8 +268,14 @@ function Trabajadores() {
       const { data } = await api.get('/trabajadores');
       setTrabajadores(data);
       closeModal();
-    } catch {
-      closeModal();
+    } catch (error) {
+      // HTTP 409: username duplicado. Se muestra el mensaje dentro del modal
+      // sin cerrarlo, igual al patrón de Proveedores con NIT duplicado.
+      if (error.response?.status === 409) {
+        setUserNameError(error.response?.data?.message || 'El nombre de usuario ya está en uso.');
+      } else {
+        closeModal();
+      }
     }
   };
 
@@ -369,6 +381,7 @@ function Trabajadores() {
           onSave={handleSave}
           initialData={initialData}
           isEdit={!!editando}
+          userNameError={userNameError}
         />
       )}
     </div>
