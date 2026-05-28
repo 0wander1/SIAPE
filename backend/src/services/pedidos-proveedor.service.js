@@ -181,6 +181,7 @@ const CAMPOS_PERMITIDOS_UPDATE = [
 // del pedido como los incrementos de inventario, de forma que si cualquier UPDATE de
 // inventario falla el cambio de estado también se revierte y no queda stock inconsistente.
 async function update(id, data) {
+  const { bodega_id } = data;
   const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
 
   if (campos.length === 0) {
@@ -206,6 +207,17 @@ async function update(id, data) {
   try {
     await conn.beginTransaction();
 
+    const [[pedidoActual]] = await conn.query(
+      'SELECT estado FROM pedido_proveedor WHERE id_pedido_prov = ?',
+      [id]
+    );
+    if (pedidoActual?.estado === 'recibido') {
+      throw Object.assign(
+        new Error('El pedido ya fue recibido anteriormente.'),
+        { status: 409 }
+      );
+    }
+
     const [result] = await conn.query(
       `UPDATE pedido_proveedor SET ${setClauses.join(', ')} WHERE id_pedido_prov = ?`,
       [...valores, id]
@@ -223,11 +235,12 @@ async function update(id, data) {
 
     for (const item of items) {
       await conn.query(
-        `UPDATE inventario
-            SET cantidad_disponible  = cantidad_disponible + ?,
-                ultima_actualizacion = NOW()
-          WHERE producto_id_producto = ?`,
-        [item.cantidad, item.producto_id_producto]
+        `INSERT INTO inventario (producto_id_producto, bodega_id_bodega, cantidad_disponible, cantidad_reservada, cantidad_minima, ultima_actualizacion)
+         VALUES (?, ?, ?, 0, 0, NOW())
+         ON DUPLICATE KEY UPDATE
+           cantidad_disponible  = cantidad_disponible + VALUES(cantidad_disponible),
+           ultima_actualizacion = NOW()`,
+        [item.producto_id_producto, bodega_id, item.cantidad]
       );
     }
 

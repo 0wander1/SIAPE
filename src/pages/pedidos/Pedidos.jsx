@@ -335,7 +335,13 @@ function EditarPedidoModal({ pedido, onClose, onSave }) {
     estado:        pedido.estado ?? 'pendiente',
     fechaEstimada: pedido.fechaEstimada?.slice(0, 10) ?? '',
     observaciones: pedido.observaciones ?? '',
+    bodega_id:     '',
   });
+  const [bodegas, setBodegas] = useState([]);
+
+  useEffect(() => {
+    api.get('/bodegas').then(({ data }) => setBodegas(data)).catch(() => {});
+  }, []);
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -357,12 +363,23 @@ function EditarPedidoModal({ pedido, onClose, onSave }) {
         </FormField>
 
         {form.estado === 'recibido' && (
-          <div style={{
-            background: '#fffbeb', border: '1px solid #fcd34d',
-            color: '#92400e', borderRadius: 6, padding: '10px 14px', fontSize: 13, lineHeight: 1.5,
-          }}>
-            ⚠️ Al guardar este cambio, las cantidades de los productos se agregarán automáticamente al inventario. Esta acción no se puede deshacer.
-          </div>
+          <>
+            <div style={{
+              background: '#fffbeb', border: '1px solid #fcd34d',
+              color: '#92400e', borderRadius: 6, padding: '10px 14px', fontSize: 13, lineHeight: 1.5,
+            }}>
+              ⚠️ Al guardar este cambio, las cantidades de los productos se agregarán automáticamente al inventario. Esta acción no se puede deshacer.
+            </div>
+
+            <FormField label='Bodega de destino' required>
+              <Select name='bodega_id' value={form.bodega_id} onChange={handleChange} required>
+                <option value=''>Seleccionar bodega...</option>
+                {bodegas.map((b) => (
+                  <option key={b.id_bodega} value={b.id_bodega}>{b.descripcion}</option>
+                ))}
+              </Select>
+            </FormField>
+          </>
         )}
 
         <FormField label='Fecha Estimada de Entrega'>
@@ -432,9 +449,10 @@ function Pedidos() {
   const handleUpdate = async (form) => {
     try {
       await api.put(`/pedidos-proveedor/${editando.id_pedido_prov}`, {
-        estado:                 form.estado,
+        estado:         form.estado,
         fecha_estimada: form.fechaEstimada || null,
-        observaciones:          form.observaciones || null,
+        observaciones:  form.observaciones || null,
+        ...(form.estado === 'recibido' ? { bodega_id: form.bodega_id } : {}),
       });
       const { data } = await api.get('/pedidos-proveedor');
       setPedidos(data);
