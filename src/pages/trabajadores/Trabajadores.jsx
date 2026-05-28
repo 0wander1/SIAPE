@@ -22,9 +22,15 @@ import styles from './Trabajadores.module.css';
 // para que el administrador no vea ni sobreescriba la contraseña actual
 // a menos que quiera cambiarla explícitamente.
 const emptyForm = {
-  nombre: '', cargo: '', direccion: '', turno: 'Mañana',
+  nombre: '', cargo: 'Bodeguero', direccion: '', turno: 'Mañana',
   celular: '', correo: '', username: '', password: '', confirmPassword: '',
 };
+
+const CARGOS = [
+  'Bodeguero', 'Vendedor', 'Cajero', 'Conductor', 'Operario',
+  'Contador', 'Asistente Administrativo', 'Recursos Humanos',
+  'Asesor Comercial', 'Jefe de Ventas',
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal de creación / edición de trabajador
@@ -33,12 +39,21 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit, userNameError }
   const [form, setForm] = useState(initialData ?? emptyForm);
   // `error` muestra mensajes de validación de contraseña dentro del modal.
   const [error, setError] = useState('');
+  // `isAdmin` controla el checkbox "Es administrador"; cuando está activo
+  // deshabilita el select de cargo y fija form.cargo = 'admin'.
+  const [isAdmin, setIsAdmin] = useState((initialData?.cargo ?? '') === 'admin');
 
   // Limpia el error en cada pulsación para que no persista después de que
   // el usuario empiece a corregir el campo que lo originó.
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
     setError('');
+  };
+
+  const handleAdminChange = (e) => {
+    const checked = e.target.checked;
+    setIsAdmin(checked);
+    setForm((prev) => ({ ...prev, cargo: checked ? 'admin' : 'Bodeguero' }));
   };
 
   // Validación de contraseñas antes de delegar al padre.
@@ -81,8 +96,14 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit, userNameError }
               placeholder='Nombre y apellidos' required />
           </FormField>
           <FormField label='Cargo' required>
-            <Input name='cargo' value={form.cargo} onChange={handleChange}
-              placeholder='Ej. Bodeguero' required />
+            <Select name='cargo' value={form.cargo} onChange={handleChange}
+              disabled={isAdmin} required>
+              {CARGOS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input type='checkbox' checked={isAdmin} onChange={handleAdminChange} />
+              Es administrador
+            </label>
           </FormField>
         </FormRow>
 

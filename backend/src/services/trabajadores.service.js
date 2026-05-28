@@ -188,6 +188,51 @@ async function update(id, data) {
     return getById(id);
   }
 
+  // --- Modo C: Reseteo de contraseña por administrador ---
+  // Se activa cuando el body trae "password" sin "contrasena_actual".
+  // No verifica la contraseña anterior: el administrador tiene potestad para
+  // sobreescribirla directamente (ej. al crear o editar desde el panel admin).
+  const { password } = data;
+  if (contrasena_actual === undefined && password !== undefined) {
+    const [[trab]] = await pool.query(
+      'SELECT cargo FROM usuario_trab WHERE id_usuario_trab = ?',
+      [id]
+    );
+    if (!trab) return null;
+    if (trab.cargo === 'admin') {
+      throw Object.assign(
+        new Error('No se puede cambiar la contraseña de un administrador.'),
+        { status: 403 }
+      );
+    }
+    const salt    = await bcrypt.genSalt(10);
+    const newHash = await bcrypt.hash(password, salt);
+    const [result] = await pool.query(
+      'UPDATE usuario_trab SET password_hash = ?, salt = ? WHERE id_usuario_trab = ?',
+      [newHash, salt, id]
+    );
+    if (result.affectedRows === 0) return null;
+
+    // Aplica también los campos de perfil que vengan en el mismo body,
+    // usando la misma lógica de lista blanca y SET dinámico del Modo B.
+    const { nombre } = data;
+    if (nombre !== undefined) {
+      await pool.query(
+        'UPDATE usuario SET nombre_usuario = ? WHERE id_usuario = ?',
+        [nombre, id]
+      );
+    }
+    const campos = Object.keys(data).filter((k) => CAMPOS_PERMITIDOS_UPDATE.includes(k));
+    if (campos.length > 0) {
+      const setClause = campos.map((c) => `${c} = ?`).join(', ');
+      await pool.query(
+        `UPDATE usuario_trab SET ${setClause} WHERE id_usuario_trab = ?`,
+        [...campos.map((c) => data[c]), id]
+      );
+    }
+    return getById(id);
+  }
+
   // --- Modo B: Actualización de perfil ---
   // Se filtran los campos del body contra CAMPOS_PERMITIDOS_UPDATE para construir
   // el SET dinámico. password_hash y salt no están en la lista blanca, por lo que
