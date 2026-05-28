@@ -401,8 +401,8 @@ function Proveedores() {
                 <td className={styles.mono}>{p.NIT}</td>
                 <td>
                   {/* Badge azul si tiene productos asociados, gris si no tiene ninguno */}
-                  <span className={(p.productos_asociados?.length ?? 0) > 0 ? styles.badgeBlue : styles.badgeGray}>
-                    {p.productos_asociados?.length ?? 0}
+                  <span className={(p.pedidos_pendientes ?? 0) > 0 ? styles.badgeBlue : styles.badgeGray}>
+                    {p.pedidos_pendientes ?? 0}
                   </span>
                 </td>
                 <td>-</td>

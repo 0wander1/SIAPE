@@ -28,6 +28,7 @@ function agruparProductos(rows) {
         nombre_proveedor:    row.nombre_proveedor,
         NIT:                 row.NIT,
         id_usuario_trab:     row.id_usuario_trab,
+        pedidos_pendientes:  Number(row.pedidos_pendientes ?? 0),
         productos_asociados: [], // se irá llenando con las filas siguientes del mismo proveedor
       });
     }
@@ -86,8 +87,33 @@ const SQL_JOIN = `
 // Retorna todos los proveedores con sus productos asociados agrupados.
 // El ORDER BY aplica al proveedor; los productos de cada uno se agregan
 // en el orden en que MySQL los devuelve (sin garantía de orden interno del array).
+// El subquery correlacionado cuenta los pedidos activos (excluyendo 'recibido' y
+// 'cancelado') para cada proveedor sin alterar la cardinalidad del JOIN principal.
 async function getAll() {
-  const [rows] = await pool.query(`${SQL_JOIN} ORDER BY p.id_proveedor DESC`);
+  const [rows] = await pool.query(`
+    SELECT
+      p.id_proveedor,
+      p.nombre_proveedor,
+      p.NIT,
+      p.id_usuario_trab,
+      pp.id_prod_prov,
+      pp.producto_id_producto,
+      pp.precio_compra,
+      pp.tiempo_entrega_dias,
+      pp.es_proveedor_principal,
+      pp.fecha_inicio_contrato,
+      pp.fecha_fin_contrato,
+      pp.activo,
+      (
+        SELECT COUNT(*)
+        FROM pedido_proveedor pp2
+        WHERE pp2.proveedor_id_proveedor = p.id_proveedor
+          AND pp2.estado NOT IN ('recibido', 'cancelado')
+      ) AS pedidos_pendientes
+    FROM proveedor p
+    LEFT JOIN producto_has_proveedor pp ON p.id_proveedor = pp.proveedor_id_proveedor
+    ORDER BY p.id_proveedor DESC
+  `);
   return agruparProductos(rows);
 }
 
