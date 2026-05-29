@@ -59,7 +59,16 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
 
   // `items` es el array de líneas de producto para venta directa.
   // Arranca con un ítem vacío para que el usuario no tenga que pulsar "+ Agregar".
-  const [items, setItems] = useState([itemVacio()]);
+  const [items, setItems] = useState(
+    initialData?.productosItems?.length
+      ? initialData.productosItems.map((item) => ({
+          _key:        Date.now() + Math.random(),
+          producto_id: String(item.producto_id_producto),
+          cantidad:    String(item.cantidad),
+          busqueda:    item.nombre_producto ?? '',
+        }))
+      : [itemVacio()]
+  );
 
   // Carga el catálogo de productos al montar el modal.
   useEffect(() => {
@@ -336,9 +345,23 @@ function Facturas() {
   // absoluto (ej. 19000 COP), pero el formulario trabaja con porcentaje (ej. 19 %).
   // Para recuperar el porcentaje se divide el monto entre el subtotal y se multiplica
   // por 100. Si el subtotal es 0 se usa 0 como fallback para evitar división por cero.
-  const openEdit = (f) => {
+  const openEdit = async (f) => {
     const sub = Number(f.subtotal) || 0;
     const imp = Number(f.impuesto) || 0;
+
+    let productosItems = [];
+    try {
+      const { data } = await api.get(`/facturas/${f.id_factura}`);
+      productosItems = (data.items ?? []).map((item) => ({
+        producto_id_producto: item.producto_id_producto,
+        nombre_producto:      item.nombre_producto,
+        cantidad:             item.cantidad,
+        valor_unitario:       item.valor_unitario,
+      }));
+    } catch {
+      // si falla la carga de ítems el modal se abre con lista vacía
+    }
+
     setInitialData({
       numeroFactura:    f.numero_factura,
       fechaEmision:     f.fecha_emision?.slice(0, 10) ?? '',
@@ -347,6 +370,7 @@ function Facturas() {
       descuento:        String(Number(f.descuento) || 0),
       estado:           f.estado ?? 'emitida',
       trabajador:       String(f.usuario_trab_id ?? ''),
+      productosItems,
     });
     setEditando(f.id_factura);
     setMenuOpen(null);

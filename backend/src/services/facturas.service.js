@@ -44,7 +44,18 @@ async function getById(id) {
     'SELECT * FROM factura WHERE id_factura = ?',
     [id]
   );
-  return rows[0] || null;
+  const factura = rows[0] || null;
+  if (!factura) return null;
+
+  const [items] = await pool.query(
+    `SELECT fi.producto_id_producto, fi.cantidad, fi.valor_unitario, p.nombre_producto
+     FROM factura_item fi
+     JOIN producto p ON fi.producto_id_producto = p.id_producto
+     WHERE fi.factura_id_factura = ?`,
+    [id]
+  );
+  factura.items = items;
+  return factura;
 }
 
 // Crea una factura en una transacción que abarca validaciones, descuento de stock,
