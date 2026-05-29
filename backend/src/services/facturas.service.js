@@ -14,6 +14,7 @@ const CAMPOS_PERMITIDOS_UPDATE = [
   'estado',
   'usuario_trab_id',
   'pedido_id_pedido',
+  'cliente_id_cliente',
 ];
 
 // Campos cuya modificación implica recalcular el total.
@@ -78,6 +79,7 @@ async function create(data) {
     estado,
     usuario_trab_id,
     pedido_id_pedido,
+    cliente_id_cliente,
     productos,      // solo requerido en Modo B (venta directa)
   } = data;
 
@@ -189,8 +191,8 @@ async function create(data) {
     const [result] = await conn.query(
       `INSERT INTO factura
         (numero_factura, fecha_emision, fecha_vencimiento, subtotal, impuesto,
-         descuento, total, estado, usuario_trab_id, pedido_id_pedido)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         descuento, total, estado, usuario_trab_id, pedido_id_pedido, cliente_id_cliente)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         numero_factura,
         fecha_emision,
@@ -202,6 +204,7 @@ async function create(data) {
         estado,
         usuario_trab_id,
         pedidoId,         // null si es venta directa
+        cliente_id_cliente ?? null,
       ]
     );
 

@@ -45,6 +45,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
   // número sea único por defecto sin que el usuario tenga que calcularlo.
   const [form, setForm] = useState(initialData ?? {
     numeroFactura:    `F-2026-${String(nextNum).padStart(3, '0')}`,
+    cliente_id:       '',
     fechaEmision:     '',
     fechaVencimiento: '',
     impuesto:         19,
@@ -56,6 +57,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
   // `productos` se carga dentro del modal porque solo se necesita en el modo
   // de venta directa; cargarlo en el padre sería prematuro.
   const [productos, setProductos] = useState([]);
+  const [clientes, setClientes]   = useState([]);
 
   // `items` es el array de líneas de producto para venta directa.
   // Arranca con un ítem vacío para que el usuario no tenga que pulsar "+ Agregar".
@@ -74,6 +76,9 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
   useEffect(() => {
     api.get('/productos')
       .then(({ data }) => setProductos(data ?? []))
+      .catch(() => {});
+    api.get('/clientes')
+      .then(({ data }) => setClientes(data ?? []))
       .catch(() => {});
   }, []);
 
@@ -146,6 +151,19 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
             {pedidoError}
           </div>
         )}
+
+        <FormRow>
+          <FormField label='Cliente' required>
+            <Select name='cliente_id' value={form.cliente_id} onChange={handleChange} required>
+              <option value=''>Seleccionar cliente...</option>
+              {clientes.map((c) => (
+                <option key={c.id_usuario_cli} value={c.id_usuario_cli}>
+                  {c.nombre_usuario}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        </FormRow>
 
         <FormRow>
           <FormField label='Número de Factura' required>
@@ -364,6 +382,7 @@ function Facturas() {
 
     setInitialData({
       numeroFactura:    f.numero_factura,
+      cliente_id:       String(f.cliente_id_cliente ?? ''),
       fechaEmision:     f.fecha_emision?.slice(0, 10) ?? '',
       fechaVencimiento: f.fecha_vencimiento?.slice(0, 10) ?? '',
       impuesto:         sub > 0 ? Math.round((imp / sub) * 100) : 0,
@@ -421,7 +440,8 @@ function Facturas() {
       impuesto:          form.impuesto,
       descuento:         Number(form.descuento) || 0,
       estado:            form.estado,
-      usuario_trab_id:   usuarioTrabId,
+      usuario_trab_id:    usuarioTrabId,
+      cliente_id_cliente: Number(form.cliente_id),
       productos: form.productosItems,
     };
 
