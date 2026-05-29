@@ -45,10 +45,8 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
   // número sea único por defecto sin que el usuario tenga que calcularlo.
   const [form, setForm] = useState(initialData ?? {
     numeroFactura:    `F-2026-${String(nextNum).padStart(3, '0')}`,
-    idPedido:         '',
     fechaEmision:     '',
     fechaVencimiento: '',
-    subtotal:         '',
     impuesto:         19,
     descuento:        0,
     estado:           'emitida',
@@ -97,12 +95,7 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
     return acc + (Number(prod?.valor_de_venta) || 0) * (Number(item.cantidad) || 0);
   }, 0);
 
-  // `subtotalBase` determina qué valor se usa para calcular impuesto y total:
-  // - Con pedido asociado: se usa el subtotal ingresado manualmente por el usuario
-  //   (el campo es editable porque el pedido ya tiene su propio valor).
-  // - Sin pedido (venta directa): se usa el subtotal calculado automáticamente
-  //   a partir de los ítems (el campo se muestra deshabilitado).
-  const subtotalBase = form.idPedido ? Number(form.subtotal) || 0 : subtotalItems;
+  const subtotalBase = subtotalItems;
 
   // Impuesto y total se recalculan en cada render a partir de subtotalBase.
   // Math.round elimina centavos fraccionados del impuesto.
@@ -150,46 +143,9 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
             <Input name='numeroFactura' value={form.numeroFactura}
               onChange={handleChange} placeholder='F-2026-001' required />
           </FormField>
-          {/*
-            El pedido asociado es opcional. Al seleccionar un pedido el modal
-            oculta la sección de productos y habilita el campo de subtotal manual,
-            porque el valor ya viene determinado por el pedido.
-            Al dejarlo en 'Sin pedido asociado' se activa el modo venta directa
-            con cálculo automático de subtotal.
-          */}
-          <FormField label='Pedido Asociado'>
-            <Select name='idPedido' value={form.idPedido} onChange={handleChange}>
-              <option value=''>Sin pedido asociado</option>
-              {pedidos.map((p) => (
-                <option key={p.id_pedido ?? p.id} value={p.id_pedido ?? p.id}>
-                  {p.id_pedido ?? p.id} — {p.cliente ?? p.nombre_cliente}
-                </option>
-              ))}
-            </Select>
-          </FormField>
         </FormRow>
 
-        {/*
-          Sección de productos para venta directa (sin pedido asociado).
-          Solo se renderiza cuando form.idPedido está vacío.
-
-          Cada línea de producto tiene:
-          - Campo de búsqueda libre (item.busqueda): filtra el catálogo de productos
-            en tiempo real para esa línea específica, sin afectar las demás.
-            El filtro compara contra nombre_producto ignorando mayúsculas.
-          - Select de producto: muestra solo los productos que coinciden con la búsqueda
-            de esa línea (productosFiltrados).
-          - Campo de cantidad: número entero ≥ 1.
-          - Total de línea (lineaTotal): valor_de_venta × cantidad, calculado y mostrado
-            en tiempo real como referencia visual; no es un campo editable.
-          - Botón × para eliminar la línea. Se deshabilita cuando solo queda una línea
-            para garantizar que siempre haya al menos un producto en la factura.
-
-          Los labels de cabecera (Buscar, Producto, Cant.) solo aparecen en la primera
-          fila (idx === 0) para evitar que se repitan en cada línea adicional.
-        */}
-        {!form.idPedido && (
-          <div>
+        <div>
             <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#374151' }}>Productos</p>
             {items.map((item, idx) => {
               const prodSeleccionado   = productos.find((p) => String(p.id_producto) === String(item.producto_id));
@@ -251,7 +207,6 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
               style={{ fontSize: 13, color: '#2563eb', background: 'none', border: '1px dashed #93c5fd', borderRadius: 6, padding: '6px 14px', cursor: 'pointer' }}
             >+ Agregar Producto</button>
           </div>
-        )}
 
         <FormRow>
           <FormField label='Fecha de Emisión' required>
@@ -265,17 +220,8 @@ function FacturaModal({ onClose, onSave, pedidos, trabajadores, nextNum, initial
         </FormRow>
 
         <FormRow>
-          {/*
-            El campo Subtotal tiene dos comportamientos según el modo:
-            - Con pedido: input editable (el usuario ingresa el monto acordado).
-            - Venta directa: deshabilitado, muestra `subtotalItems` calculado
-              automáticamente; el usuario no puede sobreescribirlo.
-          */}
-          <FormField label='Subtotal (COP)' required>
-            {form.idPedido
-              ? <Input type='number' name='subtotal' min='0' value={form.subtotal} onChange={handleChange} placeholder='0' required />
-              : <Input value={formatCOP(subtotalItems)} disabled />
-            }
+          <FormField label='Subtotal (COP)'>
+            <Input value={formatCOP(subtotalItems)} disabled />
           </FormField>
           <FormField label='Impuesto (%)'>
             <Input type='number' name='impuesto' min='0' max='100'
@@ -395,10 +341,8 @@ function Facturas() {
     const imp = Number(f.impuesto) || 0;
     setInitialData({
       numeroFactura:    f.numero_factura,
-      idPedido:         String(f.pedido_id_pedido ?? ''),
       fechaEmision:     f.fecha_emision?.slice(0, 10) ?? '',
       fechaVencimiento: f.fecha_vencimiento?.slice(0, 10) ?? '',
-      subtotal:         String(sub),
       impuesto:         sub > 0 ? Math.round((imp / sub) * 100) : 0,
       descuento:        String(Number(f.descuento) || 0),
       estado:           f.estado ?? 'emitida',
@@ -454,13 +398,7 @@ function Facturas() {
       descuento:         Number(form.descuento) || 0,
       estado:            form.estado,
       usuario_trab_id:   usuarioTrabId,
-      pedido_id_pedido:  form.idPedido ? Number(form.idPedido) : null,
-      // El array de productos solo se incluye en venta directa (sin pedido).
-      // El spread condicional omite la clave `productos` por completo cuando
-      // hay pedido, evitando que el backend intente procesar un array vacío.
-      ...(!form.idPedido && {
-        productos: form.productosItems,
-      }),
+      productos: form.productosItems,
     };
 
     setPedidoError('');
