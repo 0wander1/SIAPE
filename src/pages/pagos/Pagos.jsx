@@ -91,7 +91,7 @@ function ValidarPagoModal({ modal, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Recibe `pagos` (además de `facturas`) para poder calcular cuánto se ha abonado
 // ya a la factura seleccionada y mostrar el saldo pendiente en tiempo real.
-function PagoModal({ onClose, onSave, facturas, pagos }) {
+function PagoModal({ onClose, onSave, facturas, pagos, pagoError }) {
   const [form, setForm] = useState({
     idFactura: '', monto: '', fecha: '', metodo: 'transferencia', referencia: '',
   });
@@ -136,6 +136,11 @@ function PagoModal({ onClose, onSave, facturas, pagos }) {
   return (
     <Modal title='Registrar Nuevo Pago' onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pagoError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '8px 12px', fontSize: 14 }}>
+            {pagoError}
+          </div>
+        )}
         <FormRow>
           {/* Campo de búsqueda libre para filtrar el select de facturas por número */}
           <FormField label='Buscar factura'>
@@ -274,6 +279,8 @@ function Pagos() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   // `errorMsg` alimenta el banner de error rojo con auto-cierre.
   const [errorMsg, setErrorMsg] = useState('');
+  // `pagoError` muestra errores del guardado dentro del modal.
+  const [pagoError, setPagoError] = useState('');
 
   // `validacionModal` lleva el estado de la consulta al servlet Java:
   // null → modal cerrado; { facturaId, loading: true } → consultando;
@@ -387,8 +394,7 @@ function Pagos() {
       setShowModal(false);
     } catch (error) {
       const msg = error.response?.data?.message || 'Error al registrar pago';
-      setErrorMsg(msg);
-      setTimeout(() => setErrorMsg(''), 4000);
+      setPagoError(msg);
     }
   };
 
@@ -431,7 +437,7 @@ function Pagos() {
           <option value='tarjeta_debito'>Tarjeta Débito</option>
           <option value='cheque'>Cheque</option>
         </select>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+        <button className={styles.btnNew} onClick={() => { setShowModal(true); setPagoError(''); }}>
           + Registrar Nuevo Pago
         </button>
       </div>
@@ -527,10 +533,11 @@ function Pagos() {
 
       {showModal && (
         <PagoModal
-          onClose={() => setShowModal(false)}
+          onClose={() => { setShowModal(false); setPagoError(''); }}
           onSave={handleSave}
           facturas={facturas}
           pagos={pagos}
+          pagoError={pagoError}
         />
       )}
 
