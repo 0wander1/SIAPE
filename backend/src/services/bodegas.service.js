@@ -65,34 +65,44 @@ async function create(data) {
     usuario_trab_id_responsable,
   } = data;
 
-  const [result] = await pool.query(
-    `INSERT INTO bodega
-      (descripcion, ubicacion, ciudad, capacidad_maxima, capacidad_actual,
-       tipo_bodega, activa, usuario_trab_id_responsable)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      descripcion,
-      ubicacion,
-      ciudad,
-      capacidad_maxima,
-      // Si capacidad_actual no se envía en el body, la bodega empieza vacía (0 unidades).
-      // ?? 0 usa nullish coalescing: solo aplica el default si el valor es null o undefined,
-      // permitiendo que se envíe explícitamente 0 sin ser reemplazado.
-      capacidad_actual ?? 0,
-      // tipo_bodega se pasa tal cual; si el valor no es uno de los tres valores del ENUM
-      // ('principal', 'secundaria', 'transito'), MySQL lanzará un error en el INSERT.
-      tipo_bodega,
-      // activa por defecto es 1 (operativa). Se usa ?? para que enviar explícitamente
-      // activa: 0 al crear siga funcionando (por ejemplo, registrar una bodega aún no habilitada).
-      // Con || en cambio, el 0 sería falsy y se reemplazaría incorrectamente por 1.
-      activa ?? 1,
-      usuario_trab_id_responsable,
-    ]
-  );
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO bodega
+        (descripcion, ubicacion, ciudad, capacidad_maxima, capacidad_actual,
+         tipo_bodega, activa, usuario_trab_id_responsable)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        descripcion,
+        ubicacion,
+        ciudad,
+        capacidad_maxima,
+        // Si capacidad_actual no se envía en el body, la bodega empieza vacía (0 unidades).
+        // ?? 0 usa nullish coalescing: solo aplica el default si el valor es null o undefined,
+        // permitiendo que se envíe explícitamente 0 sin ser reemplazado.
+        capacidad_actual ?? 0,
+        // tipo_bodega se pasa tal cual; si el valor no es uno de los tres valores del ENUM
+        // ('principal', 'secundaria', 'transito'), MySQL lanzará un error en el INSERT.
+        tipo_bodega,
+        // activa por defecto es 1 (operativa). Se usa ?? para que enviar explícitamente
+        // activa: 0 al crear siga funcionando (por ejemplo, registrar una bodega aún no habilitada).
+        // Con || en cambio, el 0 sería falsy y se reemplazaría incorrectamente por 1.
+        activa ?? 1,
+        usuario_trab_id_responsable,
+      ]
+    );
 
-  // Se retorna la bodega completa usando la PK recién generada para reflejar
-  // exactamente cómo quedó en BD, incluyendo cualquier default asignado por MySQL.
-  return getById(result.insertId);
+    // Se retorna la bodega completa usando la PK recién generada para reflejar
+    // exactamente cómo quedó en BD, incluyendo cualquier default asignado por MySQL.
+    return getById(result.insertId);
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      throw Object.assign(
+        new Error('Ya existe una bodega con ese nombre.'),
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }
 
 // Actualiza dinámicamente los campos de una bodega presentes en el body.

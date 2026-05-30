@@ -17,13 +17,13 @@ import styles from './Bodegas.module.css';
 // `estado` parte en true (activa) porque una bodega recién creada estará operativa.
 const emptyForm = {
   descripcion: '', ubicacion: '', ciudad: '', capacidadMaxima: '',
-  capacidadActual: '', tipo: 'Seca', estado: true, trabajador: '',
+  capacidadActual: '', tipo: 'seca', estado: true, trabajador: '',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal de creación / edición de bodega
 // ─────────────────────────────────────────────────────────────────────────────
-function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit }) {
+function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit, bodegaError }) {
   // En edición, `initialData` contiene los valores normalizados por openEdit().
   // En creación, el formulario parte de emptyForm con sus valores por defecto.
   const [form, setForm] = useState(initialData ?? emptyForm);
@@ -45,6 +45,11 @@ function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit }) {
   return (
     <Modal title={isEdit ? 'Editar Bodega' : 'Agregar Bodega'} onClose={onClose} size='lg'>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {bodegaError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 6, padding: '8px 12px', fontSize: 14 }}>
+            {bodegaError}
+          </div>
+        )}
         <FormField label='Descripción' required>
           <Input name='descripcion' value={form.descripcion} onChange={handleChange}
             placeholder='Ej. Bodega Principal' required />
@@ -81,9 +86,11 @@ function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit }) {
           */}
           <FormField label='Tipo'>
             <Select name='tipo' value={form.tipo} onChange={handleChange}>
-              <option value='Seca'>Seca</option>
-              <option value='Refrigerada'>Refrigerada</option>
-              <option value='Congelada'>Congelada</option>
+              <option value='seca'>Seca</option>
+              <option value='refrigerada'>Refrigerada</option>
+              <option value='congelada'>Congelada</option>
+              <option value='inflamables'>Inflamables</option>
+              <option value='general'>General</option>
             </Select>
           </FormField>
           <FormField label='Trabajador Responsable'>
@@ -156,6 +163,8 @@ function Bodegas() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   // `errorMsg` alimenta el banner de error rojo con auto-cierre.
   const [errorMsg, setErrorMsg] = useState('');
+  // `bodegaError` muestra errores del guardado dentro del modal sin cerrarlo.
+  const [bodegaError, setBodegaError] = useState('');
 
   // ── Carga inicial de datos ────────────────────────────────────────────────
   // `bodegas` y `trabajadores` se solicitan en paralelo al montar.
@@ -184,6 +193,7 @@ function Bodegas() {
     setShowModal(false);
     setEditando(null);
     setInitialData(null);
+    setBodegaError('');
   };
 
   // Normaliza los campos de la bodega antes de pasarlos al formulario:
@@ -243,6 +253,7 @@ function Bodegas() {
       activa:                      form.estado ? 1 : 0,
       usuario_trab_id_responsable: Number(form.trabajador) || null,
     };
+    setBodegaError('');
     try {
       if (editando) {
         await api.put(`/bodegas/${editando}`, payload);
@@ -253,10 +264,15 @@ function Bodegas() {
       const { data } = await api.get('/bodegas');
       setBodegas(data);
       closeModal();
-    } catch {
-      // Si la operación falla se cierra el modal sin mostrar detalles; errores
-      // graves (p. ej. duplicados de descripción) se verían en consola de red.
-      closeModal();
+    } catch (error) {
+      if (error.response?.status === 409) {
+        setBodegaError(error.response.data?.message || 'Ya existe una bodega con ese nombre.');
+      } else {
+        const msg = error.response?.data?.message || 'Error al guardar la bodega.';
+        setErrorMsg(msg);
+        setTimeout(() => setErrorMsg(''), 4000);
+        closeModal();
+      }
     }
   };
 
@@ -429,6 +445,7 @@ function Bodegas() {
           trabajadores={trabajadores}
           initialData={initialData}
           isEdit={!!editando}
+          bodegaError={bodegaError}
         />
       )}
     </div>
