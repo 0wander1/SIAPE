@@ -316,7 +316,8 @@ function Pagos() {
   const filtered = pagos.filter((p) => {
     const matchSearch =
       String(p.factura_id_factura ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      (p.referencia_transaccion ?? '').toLowerCase().includes(search.toLowerCase());
+      (p.referencia_transaccion ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (p.numero_factura ?? '').toLowerCase().includes(search.toLowerCase());
     const matchMetodo = !filtroMetodo || p.metodo_pago === filtroMetodo;
     return matchSearch && matchMetodo;
   });
@@ -452,7 +453,7 @@ function Pagos() {
           <thead>
             <tr>
               <th>ID</th>
-              <th>ID Factura</th>
+              <th>Número Factura</th>
               <th>Monto</th>
               <th>Fecha</th>
               <th>Método</th>
@@ -466,7 +467,7 @@ function Pagos() {
             {filtered.map((p) => (
               <tr key={p.id_pago}>
                 <td className={styles.mono}>{p.id_pago}</td>
-                <td className={styles.factId}>{p.factura_id_factura}</td>
+                <td className={styles.factId}>{p.numero_factura ?? p.factura_id_factura}</td>
                 <td className={styles.monto}>{formatCOP(p.monto_pagado)}</td>
                 <td>{formatDate(p.fecha_pago)}</td>
                 <td>
