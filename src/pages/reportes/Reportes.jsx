@@ -9,7 +9,7 @@
 //  2. Stock Crítico (Node backend): se carga junto con el reporte de ventas.
 //  3. Resumen de Ventas Java (Tomcat): rango de fechas → consulta al servlet.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -64,6 +64,14 @@ function Reportes() {
   const [javaLoading, setJavaLoading]         = useState(false);
   const [javaError, setJavaError]             = useState('');
   const [javaResult, setJavaResult]           = useState(null);
+
+  // Carga el stock crítico al montar para que el panel esté poblado antes de
+  // que el usuario genere el reporte de ventas.
+  useEffect(() => {
+    api.get('/reportes/inventario')
+      .then(({ data }) => setStockCritico(data.productos ?? []))
+      .catch(() => {});
+  }, []);
 
   // ── Resumen de Ventas Java: consulta al servlet ────────────────────────────
   // Usa fetch nativo (no axios) porque el servlet corre en Tomcat :8080,
@@ -273,7 +281,7 @@ function Reportes() {
         Tanto el disponible como el déficit se muestran en rojo para resaltar urgencia.
         ══════════════════════════════════════════════════════════════════════
       */}
-      {generated && (
+      {true && (
         <div className={styles.reportCard}>
           <div className={styles.reportHeaderRow}>
             <h3 className={styles.reportTitle}>⚠️ Productos con Stock Crítico</h3>
