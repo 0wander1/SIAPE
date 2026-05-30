@@ -155,4 +155,21 @@ async function getReporteInventario() {
   };
 }
 
-module.exports = { getReporteVentas, getReporteInventario };
+async function getReporteProveedores() {
+  const [proveedores] = await pool.query(
+    `SELECT
+       p.id_proveedor,
+       p.nombre_proveedor,
+       p.NIT,
+       COUNT(DISTINCT php.producto_id_producto) AS total_productos,
+       COUNT(DISTINCT pp.id_pedido_prov)        AS total_pedidos
+     FROM proveedor p
+     LEFT JOIN producto_has_proveedor php ON php.proveedor_id_proveedor = p.id_proveedor
+     LEFT JOIN pedido_proveedor        pp  ON pp.proveedor_id_proveedor  = p.id_proveedor
+     GROUP BY p.id_proveedor
+     ORDER BY p.nombre_proveedor ASC`
+  );
+  return proveedores;
+}
+
+module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores };

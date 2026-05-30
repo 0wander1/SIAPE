@@ -55,6 +55,10 @@ function Reportes() {
   const [ventas, setVentas]           = useState(null);
   // `stockCritico` almacena los productos con stock por debajo del mínimo.
   const [stockCritico, setStockCritico] = useState([]);
+  // `proveedores` almacena el resumen de proveedores con conteos de productos y pedidos.
+  const [proveedores, setProveedores]         = useState([]);
+  const [loadingProveedores, setLoadingProveedores] = useState(false);
+  const [generatedProveedores, setGeneratedProveedores] = useState(false);
 
   // ── Estado del Resumen de Ventas Java ─────────────────────────────────────
   // Cada sección tiene su propio juego de estados de carga/error/resultado para
@@ -72,6 +76,19 @@ function Reportes() {
       .then(({ data }) => setStockCritico(data.productos ?? []))
       .catch(() => {});
   }, []);
+
+  const handleGenerarProveedores = async () => {
+    setLoadingProveedores(true);
+    try {
+      const { data } = await api.get('/reportes/proveedores');
+      setProveedores(data ?? []);
+      setGeneratedProveedores(true);
+    } catch {
+      setProveedores([]);
+    } finally {
+      setLoadingProveedores(false);
+    }
+  };
 
   // ── Resumen de Ventas Java: consulta al servlet ────────────────────────────
   // Usa fetch nativo (no axios) porque el servlet corre en Tomcat :8080,
@@ -380,6 +397,54 @@ function Reportes() {
               <p className={styles.metricSub}>Valor promedio por factura</p>
             </div>
           </div>
+        )}
+      </div>
+
+      <div className={styles.reportCard}>
+        <div className={styles.reportHeader}>
+          <h3 className={styles.reportTitle}>🏭 Reporte de Proveedores</h3>
+        </div>
+        <div className={styles.dateRow}>
+          <button
+            className={styles.btnGenerar}
+            onClick={handleGenerarProveedores}
+            disabled={loadingProveedores}
+          >
+            {loadingProveedores ? 'Generando...' : 'Generar Reporte de Proveedores'}
+          </button>
+        </div>
+        {generatedProveedores && (
+          <>
+            <div className={styles.reportHeaderRow} style={{ marginTop: 16 }}>
+              <span className={styles.criticalBadge}>{proveedores.length} proveedores</span>
+            </div>
+            {proveedores.length === 0 ? (
+              <p className={styles.empty}>No hay proveedores registrados.</p>
+            ) : (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Proveedor</th>
+                      <th>NIT</th>
+                      <th>Total Productos</th>
+                      <th>Total Pedidos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proveedores.map((p) => (
+                      <tr key={p.id_proveedor}>
+                        <td>{p.nombre_proveedor}</td>
+                        <td className={styles.mono}>{p.NIT}</td>
+                        <td>{p.total_productos}</td>
+                        <td>{p.total_pedidos}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -53,4 +53,13 @@ async function getReporteInventario(req, res, next) {
   }
 }
 
-module.exports = { getReporteVentas, getReporteInventario };
+async function getReporteProveedores(req, res, next) {
+  try {
+    const proveedores = await reportesService.getReporteProveedores();
+    return res.status(200).json(proveedores);
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores };

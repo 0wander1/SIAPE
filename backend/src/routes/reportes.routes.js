@@ -24,7 +24,11 @@ router.get('/ventas',     verifyToken, reportesController.getReporteVentas);
 // mayor disponibilidad para priorizar los más urgentes de reabastecer.
 // No requiere parámetros porque el criterio de criticidad está definido en la BD
 // (cantidad_disponible < cantidad_minima) y se aplica al inventario completo.
-router.get('/inventario', verifyToken, reportesController.getReporteInventario);
+router.get('/inventario',  verifyToken, reportesController.getReporteInventario);
+
+// GET /api/reportes/proveedores
+// Retorna todos los proveedores con su conteo de productos asociados y pedidos totales.
+router.get('/proveedores', verifyToken, reportesController.getReporteProveedores);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/reportes".
 module.exports = router;
