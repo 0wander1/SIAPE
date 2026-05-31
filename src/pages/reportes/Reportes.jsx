@@ -56,9 +56,12 @@ function Reportes() {
   // `stockCritico` almacena los productos con stock por debajo del mínimo.
   const [stockCritico, setStockCritico] = useState([]);
   // `proveedores` almacena el resumen de proveedores con conteos de productos y pedidos.
-  const [proveedores, setProveedores]         = useState([]);
+  const [proveedores, setProveedores]               = useState([]);
   const [loadingProveedores, setLoadingProveedores] = useState(false);
   const [generatedProveedores, setGeneratedProveedores] = useState(false);
+  const [trabajadores, setTrabajadores]               = useState([]);
+  const [loadingTrabajadores, setLoadingTrabajadores] = useState(false);
+  const [generatedTrabajadores, setGeneratedTrabajadores] = useState(false);
 
   // ── Estado del Resumen de Ventas Java ─────────────────────────────────────
   // Cada sección tiene su propio juego de estados de carga/error/resultado para
@@ -87,6 +90,19 @@ function Reportes() {
       setProveedores([]);
     } finally {
       setLoadingProveedores(false);
+    }
+  };
+
+  const handleGenerarTrabajadores = async () => {
+    setLoadingTrabajadores(true);
+    try {
+      const { data } = await api.get('/reportes/trabajadores');
+      setTrabajadores(data ?? []);
+      setGeneratedTrabajadores(true);
+    } catch {
+      setTrabajadores([]);
+    } finally {
+      setLoadingTrabajadores(false);
     }
   };
 
@@ -438,6 +454,56 @@ function Reportes() {
                         <td className={styles.mono}>{p.NIT}</td>
                         <td>{p.total_productos}</td>
                         <td>{p.total_pedidos}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={styles.reportCard}>
+        <div className={styles.reportHeader}>
+          <h3 className={styles.reportTitle}>👷 Reporte de Trabajadores</h3>
+        </div>
+        <div className={styles.dateRow}>
+          <button
+            className={styles.btnGenerar}
+            onClick={handleGenerarTrabajadores}
+            disabled={loadingTrabajadores}
+          >
+            {loadingTrabajadores ? 'Generando...' : 'Generar Reporte de Trabajadores'}
+          </button>
+        </div>
+        {generatedTrabajadores && (
+          <>
+            <div className={styles.reportHeaderRow} style={{ marginTop: 16 }}>
+              <span className={styles.criticalBadge}>{trabajadores.length} trabajadores</span>
+            </div>
+            {trabajadores.length === 0 ? (
+              <p className={styles.empty}>No hay trabajadores registrados.</p>
+            ) : (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Cargo</th>
+                      <th>Turno</th>
+                      <th>Celular</th>
+                      <th>Correo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trabajadores.map((t) => (
+                      <tr key={t.id_usuario_trab}>
+                        <td>{t.nombre}</td>
+                        <td>{t.cargo}</td>
+                        <td>{t.turno}</td>
+                        <td className={styles.mono}>{t.celular ?? '—'}</td>
+                        <td className={styles.mono}>{t.correo ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>

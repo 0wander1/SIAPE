@@ -28,7 +28,8 @@ router.get('/inventario',  verifyToken, reportesController.getReporteInventario)
 
 // GET /api/reportes/proveedores
 // Retorna todos los proveedores con su conteo de productos asociados y pedidos totales.
-router.get('/proveedores', verifyToken, reportesController.getReporteProveedores);
+router.get('/proveedores',  verifyToken, reportesController.getReporteProveedores);
+router.get('/trabajadores', verifyToken, reportesController.getReporteTrabajadores);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/reportes".
 module.exports = router;

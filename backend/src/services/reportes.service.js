@@ -172,4 +172,20 @@ async function getReporteProveedores() {
   return proveedores;
 }
 
-module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores };
+async function getReporteTrabajadores() {
+  const [trabajadores] = await pool.query(
+    `SELECT
+       ut.id_usuario_trab,
+       u.nombre_usuario AS nombre,
+       ut.cargo,
+       ut.turno,
+       ut.celular,
+       ut.correo
+     FROM usuario_trab ut
+     JOIN usuario u ON u.id_usuario = ut.id_usuario_trab
+     ORDER BY ut.cargo ASC`
+  );
+  return trabajadores;
+}
+
+module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores, getReporteTrabajadores };
