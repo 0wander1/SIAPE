@@ -1,6 +1,7 @@
 // Componente raíz que define el sistema de rutas de toda la aplicación
 // usando React Router v6 (BrowserRouter + Routes + Route).
 
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import Login from './pages/login/Login.jsx';
@@ -45,6 +46,33 @@ const AdminRoute = ({ children }) => {
 };
 
 function App() {
+  useEffect(() => {
+    const token = localStorage.getItem('siape_token');
+    if (!token) return;
+
+    let timeoutId;
+    try {
+      const { exp } = JSON.parse(atob(token.split('.')[1]));
+      const msRestantes = exp * 1000 - Date.now();
+
+      const cerrarSesion = () => {
+        localStorage.removeItem('siape_token');
+        localStorage.removeItem('siape_user');
+        window.location.href = '/login';
+      };
+
+      if (msRestantes <= 0) {
+        cerrarSesion();
+      } else {
+        timeoutId = setTimeout(cerrarSesion, msRestantes);
+      }
+    } catch {
+      // token malformado — no programar nada
+    }
+
+    return () => clearTimeout(timeoutId);
+  }, []);
+
   return (
     // BrowserRouter habilita el enrutamiento basado en la API History del navegador
     // (URLs limpias sin hash, p. ej. /dashboard en lugar de /#/dashboard).

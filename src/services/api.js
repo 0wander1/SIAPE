@@ -37,10 +37,10 @@ api.interceptors.response.use(
   (error) => {
     const url = error.config?.url ?? '';
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/verify-code') || url.includes('/trabajadores');
-    if (error.response?.status === 401 && !isAuthEndpoint) {
+    if ((error.response?.status === 401 || error.response?.status === 403) && !isAuthEndpoint) {
       localStorage.removeItem('siape_token');
       localStorage.removeItem('siape_user');
-      window.location.href = '/';
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
