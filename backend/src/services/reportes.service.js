@@ -4,7 +4,7 @@ const { pool } = require('../config/db');
 //   1. Resumen global: métricas agregadas de todo el período en una sola fila.
 //   2. Desglose semanal: las mismas métricas agrupadas semana a semana.
 // Ambas consultas aplican el mismo filtro de fechas y excluyen facturas anuladas.
-async function getReporteVentas(fechaInicio, fechaFin) {
+async function getReporteVentas(fechaInicio, fechaFin, agrupacion = 'semana') {
 
   // --- Consulta 1: Resumen global del período ---
   // Las tres funciones de agregación operan sobre el mismo conjunto de filas
@@ -71,17 +71,31 @@ async function getReporteVentas(fechaInicio, fechaFin) {
   //     permitiendo al front-end dibujar un gráfico de barras o líneas en orden temporal.
   //
   // La simple desestructuración [porSemana] extrae el array completo de filas (una por semana).
+  const esDia = agrupacion === 'dia';
   const [porSemana] = await pool.query(
-    `SELECT
-       YEARWEEK(fecha_emision, 1)                        AS semana,
-       DATE_FORMAT(MIN(fecha_emision), '%Y-%m-%d')        AS inicio_semana,
-       COUNT(*)                                           AS total_facturas,
-       COALESCE(SUM(total), 0)                            AS ingresos
-     FROM factura
-     WHERE fecha_emision BETWEEN ? AND ?
-       AND estado <> 'anulada'
-     GROUP BY YEARWEEK(fecha_emision, 1)
-     ORDER BY semana ASC`,
+    esDia
+      ? `SELECT
+           DATE_FORMAT(fecha_dia, '%Y-%m-%d') AS semana,
+           COUNT(*)                     AS total_facturas,
+           COALESCE(SUM(total), 0)      AS ingresos
+         FROM (
+           SELECT DATE(fecha_emision) AS fecha_dia, total
+           FROM factura
+           WHERE fecha_emision BETWEEN ? AND ?
+             AND estado <> 'anulada'
+         ) AS sub
+         GROUP BY fecha_dia
+         ORDER BY fecha_dia ASC`
+      : `SELECT
+           YEARWEEK(fecha_emision, 1)                       AS semana,
+           DATE_FORMAT(MIN(fecha_emision), '%Y-%m-%d')       AS inicio_semana,
+           COUNT(*)                                          AS total_facturas,
+           COALESCE(SUM(total), 0)                           AS ingresos
+         FROM factura
+         WHERE fecha_emision BETWEEN ? AND ?
+           AND estado <> 'anulada'
+         GROUP BY YEARWEEK(fecha_emision, 1)
+         ORDER BY semana ASC`,
     [fechaInicio, fechaFin]
   );
 

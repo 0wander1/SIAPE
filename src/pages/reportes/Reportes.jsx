@@ -46,6 +46,7 @@ function Reportes() {
   // ── Estado del Reporte de Ventas (Node) ───────────────────────────────────
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin]       = useState('');
+  const [agrupacion, setAgrupacion]   = useState('semana');
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   // `generated` controla si las secciones de resultados (métricas + gráfico +
@@ -162,7 +163,7 @@ function Reportes() {
     setError('');
     try {
       const [ventasRes, invRes] = await Promise.all([
-        api.get(`/reportes/ventas?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`),
+        api.get(`/reportes/ventas?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}&agrupacion=${agrupacion}`),
         api.get('/reportes/inventario'),
       ]);
 
@@ -174,7 +175,7 @@ function Reportes() {
         // Mapea por_semana al shape { semana, ventas } que consume el BarChart.
         // `semana` va al eje X y `ventas` es el valor de cada barra.
         porSemana: (v.por_semana ?? []).map((s) => ({
-          semana: s.inicio_semana,
+          semana: s.inicio_semana ?? s.semana,
           ventas: Number(s.ingresos),
         })),
       });
@@ -220,6 +221,17 @@ function Reportes() {
               type='date' className={styles.dateInput} required
               value={fechaFin} onChange={(e) => setFechaFin(e.target.value)}
             />
+          </div>
+          <div className={styles.dateField}>
+            <label className={styles.dateLabel}>Agrupar por</label>
+            <select
+              className={styles.dateInput}
+              value={agrupacion}
+              onChange={(e) => setAgrupacion(e.target.value)}
+            >
+              <option value='semana'>Por semana</option>
+              <option value='dia'>Por día</option>
+            </select>
           </div>
           <button type='submit' className={styles.btnGenerar} disabled={loading}>
             {loading ? 'Generando...' : 'Generar Reporte'}

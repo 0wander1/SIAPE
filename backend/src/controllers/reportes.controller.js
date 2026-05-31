@@ -10,7 +10,7 @@ async function getReporteVentas(req, res, next) {
     // req.query devuelve siempre strings; las fechas en formato YYYY-MM-DD son
     // comparables lexicográficamente con > porque ese formato es lexicográficamente
     // ordenable (año → mes → día), lo que permite la validación de rango sin parsear.
-    const { fecha_inicio, fecha_fin } = req.query;
+    const { fecha_inicio, fecha_fin, agrupacion = 'semana' } = req.query;
 
     // Validación de presencia: ambas fechas son obligatorias para acotar el período.
     // Sin ellas la consulta devolvería todos los datos históricos, lo que podría ser
@@ -33,7 +33,7 @@ async function getReporteVentas(req, res, next) {
 
     // Se delegan las fechas validadas al servicio, que ejecutará las dos consultas
     // SQL (resumen global y desglose semanal) y devolverá el objeto de reporte completo.
-    const reporte = await reportesService.getReporteVentas(fecha_inicio, fecha_fin);
+    const reporte = await reportesService.getReporteVentas(fecha_inicio, fecha_fin, agrupacion);
     return res.status(200).json(reporte);
   } catch (error) {
     next(error);
