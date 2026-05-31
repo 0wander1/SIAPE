@@ -31,5 +31,10 @@ router.get('/inventario',  verifyToken, reportesController.getReporteInventario)
 router.get('/proveedores',  verifyToken, reportesController.getReporteProveedores);
 router.get('/trabajadores', verifyToken, reportesController.getReporteTrabajadores);
 
+// GET /api/reportes/costos?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+// Reporte de costos de pedidos a proveedor en el rango de fechas indicado.
+// Excluye pedidos cancelados. Devuelve resumen global y listado de pedidos con proveedor.
+router.get('/costos',      verifyToken, reportesController.getReporteCostos);
+
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/reportes".
 module.exports = router;

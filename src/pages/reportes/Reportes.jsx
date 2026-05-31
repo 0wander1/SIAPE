@@ -63,6 +63,12 @@ function Reportes() {
   const [trabajadores, setTrabajadores]               = useState([]);
   const [loadingTrabajadores, setLoadingTrabajadores] = useState(false);
   const [generatedTrabajadores, setGeneratedTrabajadores] = useState(false);
+  const [costos, setCostos]                           = useState(null);
+  const [loadingCostos, setLoadingCostos]             = useState(false);
+  const [generatedCostos, setGeneratedCostos]         = useState(false);
+  const [fechaInicioCostos, setFechaInicioCostos]     = useState('');
+  const [fechaFinCostos, setFechaFinCostos]           = useState('');
+  const [errorCostos, setErrorCostos]                 = useState('');
 
   // ── Estado del Resumen de Ventas Java ─────────────────────────────────────
   // Cada sección tiene su propio juego de estados de carga/error/resultado para
@@ -104,6 +110,21 @@ function Reportes() {
       setTrabajadores([]);
     } finally {
       setLoadingTrabajadores(false);
+    }
+  };
+
+  const handleGenerarCostos = async (e) => {
+    e.preventDefault();
+    setLoadingCostos(true);
+    setErrorCostos('');
+    try {
+      const { data } = await api.get(`/reportes/costos?fecha_inicio=${fechaInicioCostos}&fecha_fin=${fechaFinCostos}`);
+      setCostos(data);
+      setGeneratedCostos(true);
+    } catch (err) {
+      setErrorCostos(err.response?.data?.message || 'Error al generar el reporte de costos');
+    } finally {
+      setLoadingCostos(false);
     }
   };
 
@@ -516,6 +537,84 @@ function Reportes() {
                         <td>{t.turno}</td>
                         <td className={styles.mono}>{t.celular ?? '—'}</td>
                         <td className={styles.mono}>{t.correo ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className={styles.reportCard}>
+        <div className={styles.reportHeader}>
+          <h3 className={styles.reportTitle}>💰 Reporte de Costos</h3>
+        </div>
+        <form className={styles.dateRow} onSubmit={handleGenerarCostos}>
+          <div className={styles.dateField}>
+            <label className={styles.dateLabel}>Fecha inicio</label>
+            <input
+              type='date' className={styles.dateInput} required
+              value={fechaInicioCostos} onChange={(e) => setFechaInicioCostos(e.target.value)}
+            />
+          </div>
+          <div className={styles.dateField}>
+            <label className={styles.dateLabel}>Fecha fin</label>
+            <input
+              type='date' className={styles.dateInput} required
+              value={fechaFinCostos} onChange={(e) => setFechaFinCostos(e.target.value)}
+            />
+          </div>
+          <button type='submit' className={styles.btnGenerar} disabled={loadingCostos}>
+            {loadingCostos ? 'Generando...' : 'Generar Reporte de Costos'}
+          </button>
+        </form>
+
+        {errorCostos && <p className={styles.errorBanner}>{errorCostos}</p>}
+
+        {generatedCostos && costos && (
+          <>
+            <div className={styles.metrics}>
+              <div className={styles.metricCard}>
+                <p className={styles.metricLabel}>Total Pedidos</p>
+                <p className={styles.metricValue}>{Number(costos.resumen.total_pedidos)}</p>
+                <p className={styles.metricSub}>En el periodo seleccionado</p>
+              </div>
+              <div className={styles.metricCard}>
+                <p className={styles.metricLabel}>Costo Total</p>
+                <p className={styles.metricValue}>{formatCOP(costos.resumen.costo_total)}</p>
+                <p className={styles.metricSub}>Suma de pedidos no cancelados</p>
+              </div>
+              <div className={styles.metricCard}>
+                <p className={styles.metricLabel}>Promedio por Pedido</p>
+                <p className={styles.metricValue}>{formatCOP(Math.round(Number(costos.resumen.promedio_por_pedido)))}</p>
+                <p className={styles.metricSub}>Valor promedio por pedido</p>
+              </div>
+            </div>
+
+            {costos.pedidos.length === 0 ? (
+              <p className={styles.empty}>No hay pedidos en el periodo seleccionado.</p>
+            ) : (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Fecha</th>
+                      <th>Proveedor</th>
+                      <th>Estado</th>
+                      <th>Valor Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costos.pedidos.map((p) => (
+                      <tr key={p.id_pedido_prov}>
+                        <td className={styles.mono}>{p.id_pedido_prov}</td>
+                        <td>{new Date(p.fecha_creacion).toLocaleDateString('es-CO')}</td>
+                        <td>{p.nombre_proveedor ?? '—'}</td>
+                        <td>{p.estado}</td>
+                        <td>{formatCOP(p.valor_total)}</td>
                       </tr>
                     ))}
                   </tbody>

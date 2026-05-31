@@ -202,4 +202,37 @@ async function getReporteTrabajadores() {
   return trabajadores;
 }
 
-module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores, getReporteTrabajadores };
+async function getReporteCostos(fechaInicio, fechaFin) {
+  const [[resumen]] = await pool.query(
+    `SELECT
+       COUNT(*)                        AS total_pedidos,
+       COALESCE(SUM(valor_total), 0)   AS costo_total,
+       COALESCE(AVG(valor_total), 0)   AS promedio_por_pedido
+     FROM pedido_proveedor
+     WHERE fecha_creacion BETWEEN ? AND ?
+       AND estado <> 'cancelado'`,
+    [fechaInicio, fechaFin]
+  );
+
+  const [pedidos] = await pool.query(
+    `SELECT
+       pp.id_pedido_prov,
+       pp.fecha_creacion,
+       pp.fecha_estimada,
+       pp.estado,
+       pp.valor_total,
+       pp.observaciones,
+       p.nombre_proveedor,
+       p.NIT
+     FROM pedido_proveedor pp
+     LEFT JOIN proveedor p ON pp.proveedor_id_proveedor = p.id_proveedor
+     WHERE pp.fecha_creacion BETWEEN ? AND ?
+       AND pp.estado <> 'cancelado'
+     ORDER BY pp.fecha_creacion DESC`,
+    [fechaInicio, fechaFin]
+  );
+
+  return { resumen, pedidos };
+}
+
+module.exports = { getReporteVentas, getReporteInventario, getReporteProveedores, getReporteTrabajadores, getReporteCostos };
