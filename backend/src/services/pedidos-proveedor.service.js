@@ -254,6 +254,14 @@ async function update(id, data) {
   }
 }
 
+// Elimina un pedido a proveedor verificando primero su estado mediante un SELECT.
+// La doble desestructuración [[pedido]] extrae directamente el primer objeto de la
+// primera fila: pool.query() → [rows] → rows[0] → objeto pedido.
+// Si el pedido no existe, rows[0] es undefined → pedido queda undefined → null → 404.
+// Si el pedido tiene estado 'recibido' se lanza un error 409 Conflict porque ese pedido
+// ya incrementó el inventario al cambiar de estado; eliminarlo dejaría ese movimiento
+// de stock sin trazabilidad y sin posibilidad de revertirlo.
+// Si el pedido existe y su estado no es 'recibido', se ejecuta el DELETE y se retorna true.
 async function remove(id) {
   const [[pedido]] = await pool.query(
     'SELECT estado FROM pedido_proveedor WHERE id_pedido_prov = ?',

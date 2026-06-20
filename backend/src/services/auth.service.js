@@ -115,6 +115,10 @@ function generateCode() {
   return String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
 }
 
+// Almacena el código en el Map codigosTemporales asociado al id del usuario.
+// La marca de expiración se calcula como la hora actual más 10 minutos en milisegundos
+// (10 * 60 * 1000 = 600 000 ms), de modo que verifyCode pueda compararla con Date.now()
+// para rechazar códigos que ya superaron ese límite temporal.
 function saveCode(id, codigo) {
   codigosTemporales.set(id, {
     codigo,

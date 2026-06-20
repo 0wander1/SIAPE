@@ -1,3 +1,7 @@
+// El controlador orquesta el flujo de autenticación en dos pasos: validación de
+// credenciales y verificación del código enviado por correo. Delega el hashing,
+// la gestión de códigos temporales y la emisión del JWT al servicio; el envío
+// del correo se despacha a email.service en modo fire-and-forget.
 const authService        = require('../services/auth.service');
 const { sendVerificationCode } = require('../services/email.service');
 

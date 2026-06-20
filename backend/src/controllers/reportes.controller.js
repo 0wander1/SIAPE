@@ -53,6 +53,10 @@ async function getReporteInventario(req, res, next) {
   }
 }
 
+// Genera el reporte de proveedores. No requiere parámetros: el servicio agrega
+// el conteo de productos asociados y pedidos totales para cada proveedor mediante
+// COUNT DISTINCT sobre producto_has_proveedor y pedido_proveedor.
+// Un array vacío es una respuesta 200 válida: significa que no hay proveedores registrados.
 async function getReporteProveedores(req, res, next) {
   try {
     const proveedores = await reportesService.getReporteProveedores();
@@ -62,6 +66,10 @@ async function getReporteProveedores(req, res, next) {
   }
 }
 
+// Genera el reporte de trabajadores. No requiere parámetros: el servicio devuelve
+// todos los trabajadores con sus columnas públicas (id, nombre, cargo, turno, celular,
+// correo), ordenados por cargo. No se incluyen password_hash ni salt en ningún campo.
+// Un array vacío es una respuesta 200 válida: significa que no hay trabajadores registrados.
 async function getReporteTrabajadores(req, res, next) {
   try {
     const trabajadores = await reportesService.getReporteTrabajadores();
@@ -71,6 +79,13 @@ async function getReporteTrabajadores(req, res, next) {
   }
 }
 
+// Genera el reporte de costos de pedidos a proveedor para el rango de fechas
+// indicado en la query string. Aplica las mismas validaciones de presencia y
+// coherencia de fechas que getReporteVentas. Los pedidos cancelados se excluyen
+// porque no representan costos reales para el negocio.
+// El servicio retorna dos secciones: "resumen" con totales globales del período
+// (total_pedidos, costo_total, promedio_por_pedido) y "pedidos" con el listado
+// detallado de cada pedido junto con el nombre y NIT del proveedor.
 async function getReporteCostos(req, res, next) {
   try {
     const { fecha_inicio, fecha_fin } = req.query;

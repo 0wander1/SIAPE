@@ -169,6 +169,21 @@ async function getReporteInventario() {
   };
 }
 
+// Genera el reporte de proveedores: un listado de todos los proveedores registrados
+// enriquecido con el conteo de productos asociados y pedidos realizados a cada uno.
+//
+// Se usan dos LEFT JOINs independientes para no multiplicar filas entre sí:
+//   LEFT JOIN producto_has_proveedor: cuenta cuántos productos distintos suministra
+//     cada proveedor. COUNT DISTINCT evita contar duplicados si un producto apareciera
+//     en varias filas de la tabla pivote por alguna inconsistencia de datos.
+//   LEFT JOIN pedido_proveedor: cuenta cuántos pedidos se han hecho a cada proveedor
+//     a lo largo del tiempo, independientemente de su estado.
+// LEFT JOIN en ambos casos garantiza que los proveedores sin productos asociados ni
+// pedidos igualmente aparezcan en el resultado con total_productos = 0 y total_pedidos = 0.
+//
+// GROUP BY p.id_proveedor agrupa todas las filas del mismo proveedor en una sola para
+// que las funciones de agregación operen por proveedor y no sobre todo el conjunto.
+// ORDER BY nombre_proveedor ASC ordena el resultado alfabéticamente.
 async function getReporteProveedores() {
   const [proveedores] = await pool.query(
     `SELECT
@@ -186,6 +201,14 @@ async function getReporteProveedores() {
   return proveedores;
 }
 
+// Genera el reporte de trabajadores: el listado completo del personal con sus datos
+// públicos, sin incluir en ningún campo password_hash ni salt.
+//
+// Se usa INNER JOIN con "usuario" (no LEFT JOIN) porque todo trabajador debe tener
+// su fila correspondiente en la tabla base "usuario"; si no la tuviera indicaría un
+// dato corrupto que no debería aparecer en un reporte operativo.
+// Las columnas seleccionadas son las públicas del perfil: id, nombre, cargo, turno,
+// celular y correo. ORDER BY cargo ASC agrupa visualmente al personal por función.
 async function getReporteTrabajadores() {
   const [trabajadores] = await pool.query(
     `SELECT
@@ -202,6 +225,19 @@ async function getReporteTrabajadores() {
   return trabajadores;
 }
 
+// Genera el reporte de costos de compras a proveedores para el período indicado
+// mediante dos consultas independientes, de forma análoga a getReporteVentas:
+//   1. Resumen global: métricas agregadas del período en una sola fila
+//      (total_pedidos, costo_total, promedio_por_pedido). COALESCE(..., 0) evita
+//      que SUM y AVG retornen NULL cuando no hay pedidos en el rango de fechas.
+//      La doble desestructuración [[resumen]] extrae directamente el objeto de esa fila.
+//   2. Listado de pedidos: cada pedido del período con su proveedor y NIT resueltos
+//      mediante LEFT JOIN, ordenados por fecha_creacion DESC (el más reciente primero).
+//      LEFT JOIN garantiza que un pedido cuyo proveedor haya sido eliminado igualmente
+//      aparezca en el listado, con nombre_proveedor y NIT como null.
+// Ambas consultas excluyen pedidos cancelados porque no representan costos reales:
+// un pedido cancelado nunca fue recibido ni generó un desembolso efectivo.
+// Retorna { resumen, pedidos }.
 async function getReporteCostos(fechaInicio, fechaFin) {
   const [[resumen]] = await pool.query(
     `SELECT

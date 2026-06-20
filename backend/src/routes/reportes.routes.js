@@ -29,6 +29,11 @@ router.get('/inventario',  verifyToken, reportesController.getReporteInventario)
 // GET /api/reportes/proveedores
 // Retorna todos los proveedores con su conteo de productos asociados y pedidos totales.
 router.get('/proveedores',  verifyToken, reportesController.getReporteProveedores);
+
+// GET /api/reportes/trabajadores
+// Retorna todos los trabajadores con sus datos públicos (id, nombre, cargo, turno,
+// celular y correo), ordenados por cargo. No expone password_hash ni salt en ningún
+// campo. No requiere parámetros: el reporte abarca la totalidad del personal registrado.
 router.get('/trabajadores', verifyToken, reportesController.getReporteTrabajadores);
 
 // GET /api/reportes/costos?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
