@@ -47,14 +47,15 @@ app.use('/api', routes);
 // lo invoque únicamente cuando alguna ruta o middleware anterior llame a next(err).
 app.use(errorHandler);
 
-// Secuencia de arranque: primero se valida la conexión a MySQL y, solo si tiene
-// éxito, se inicia el servidor HTTP. Así se garantiza que el servidor nunca queda
-// en un estado funcional sin base de datos disponible.
-// testConnection() devuelve una Promise; .then() ejecuta el callback cuando se resuelve.
-testConnection().then(() => {
-  // app.listen() abre el puerto TCP y comienza a aceptar conexiones entrantes.
-  // El callback se ejecuta una sola vez, cuando el servidor ya está listo.
-  app.listen(PORT, () => {
-    console.log(`Servidor SIAPE corriendo en http://localhost:${PORT}`);
+// Cuando el archivo se ejecuta directamente (node server.js), primero se valida
+// la conexión a MySQL y solo entonces se abre el puerto. Al importar server.js
+// desde los tests, este bloque no se ejecuta y la DB no se toca.
+if (require.main === module) {
+  testConnection().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Servidor SIAPE corriendo en http://localhost:${PORT}`);
+    });
   });
-});
+}
+
+module.exports = app;
