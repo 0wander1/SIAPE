@@ -8,7 +8,7 @@ import axios from 'axios';
 // Instancia de Axios preconfigurada con la URL base del backend y un
 // tiempo de espera máximo de 10 segundos por petición.
 const api = axios.create({
-  baseURL: 'http://localhost:4000/api',
+  baseURL: 'https://siape-production.up.railway.app/api',
   timeout: 10000,
 });
 
