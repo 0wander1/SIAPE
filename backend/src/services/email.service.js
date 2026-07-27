@@ -37,9 +37,11 @@ const nodemailer = require('nodemailer');
 async function sendVerificationCode(correo, codigo) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
+    host: 'smtp.gmail.com',
     port: 587,
     secure: false,      // false = STARTTLS en puerto 587, no SSL directo
     requireTLS: true,   // fuerza la elevación a TLS antes de enviar credenciales
+    family: 4,          // fuerza IPv4 para evitar timeouts de conexión por IPv6
     auth: {
       user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_PASS,
