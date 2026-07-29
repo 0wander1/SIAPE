@@ -36,7 +36,6 @@ const nodemailer = require('nodemailer');
 //   de este modo el fallo de correo no afecta al usuario ni bloquea el proceso de login.
 async function sendVerificationCode(correo, codigo) {
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,      // false = STARTTLS en puerto 587, no SSL directo
