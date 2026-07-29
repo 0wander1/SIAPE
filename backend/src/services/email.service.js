@@ -1,8 +1,9 @@
-// Servicio de envío de correos electrónicos transaccionales mediante nodemailer.
-// Usa Gmail como servidor SMTP con autenticación a través de las variables de entorno
-// GMAIL_USER (dirección del remitente) y GMAIL_PASS (contraseña de aplicación de Google).
+// Servicio de envío de correos electrónicos transaccionales mediante Resend.
+// Usa la API key de la variable de entorno RESEND_API_KEY.
 // Este servicio solo envía correos; no almacena registros ni gestiona reintentos.
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Envía un correo HTML al destinatario indicado con el código de verificación de seis dígitos.
 // Se usa durante el segundo paso del login (auth.controller → auth.service → aquí) para
@@ -12,46 +13,15 @@ const nodemailer = require('nodemailer');
 //   correo — dirección de destino obtenida del registro del trabajador en la BD.
 //   codigo — string de 6 dígitos generado por authService.generateCode().
 //
-// Configuración SMTP:
-//   port: 587 con secure: false y requireTLS: true implementa el protocolo STARTTLS:
-//   la conexión comienza sin cifrado en el puerto 587 y luego se eleva a TLS mediante
-//   el comando STARTTLS antes de enviar las credenciales. Es la alternativa estándar
-//   al puerto 465 (SSL directo). Gmail exige STARTTLS en el puerto 587; usar
-//   secure: true en ese puerto causaría un error de negociación TLS.
-//
-//   connectionTimeout y greetingTimeout en 10 000 ms evitan que la función quede
-//   colgada indefinidamente si Gmail no responde (red lenta, servicio caído, etc.).
-//   Sin estos límites un envío fallido bloquearía el event loop de Node durante
-//   el tiempo de espera por defecto del sistema operativo (que puede ser de minutos).
-//
-//   Se crea un transporter nuevo en cada llamada en lugar de reutilizar uno global
-//   porque las llamadas son infrecuentes (una por login) y la simplicidad supera
-//   el coste marginal de instanciar el objeto cada vez.
-//
 // Comportamiento ante errores:
-//   Si sendMail lanza una excepción (credenciales inválidas, destinatario rechazado,
-//   timeout de red, etc.) este servicio la registra en consola y la vuelve a lanzar
+//   Si Resend devuelve un error, este servicio lo registra en consola y lo vuelve a lanzar
 //   para que el llamador decida cómo manejarla. En auth.controller el error se captura
 //   en silencio porque la respuesta HTTP ya fue enviada (patrón fire-and-forget);
 //   de este modo el fallo de correo no afecta al usuario ni bloquea el proceso de login.
 async function sendVerificationCode(correo, codigo) {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,      // false = STARTTLS en puerto 587, no SSL directo
-    requireTLS: true,   // fuerza la elevación a TLS antes de enviar credenciales
-    family: 4,          // fuerza IPv4 para evitar timeouts de conexión por IPv6
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_PASS,
-    },
-    connectionTimeout: 10000,  // ms máximos para establecer la conexión TCP
-    greetingTimeout:   10000,  // ms máximos para recibir el saludo SMTP del servidor
-  });
-
   try {
-    await transporter.sendMail({
-      from:    `"SIAPE" <${process.env.GMAIL_USER}>`,
+    const { error } = await resend.emails.send({
+      from:    'onboarding@resend.dev',
       to:      correo,
       subject: 'Código de verificación SIAPE',
       html: `
@@ -65,8 +35,12 @@ async function sendVerificationCode(correo, codigo) {
         </div>
       `,
     });
+
+    if (error) {
+      throw error;
+    }
   } catch (error) {
-    console.error('Error nodemailer:', error);
+    console.error('Error Resend:', error);
     throw error;
   }
 }
