@@ -21,7 +21,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 async function sendVerificationCode(correo, codigo) {
   try {
     const { error } = await resend.emails.send({
-      from:    'onboarding@resend.dev',
+      from:    'noreply@siape.site',
       to:      correo,
       subject: 'Código de verificación SIAPE',
       html: `
