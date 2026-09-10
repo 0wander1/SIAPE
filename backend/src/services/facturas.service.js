@@ -311,4 +311,4 @@ async function remove(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { getAll, getById, create, update, remove };
+module.exports = { getAll, getById, create, update, remove, calcularTotal };
