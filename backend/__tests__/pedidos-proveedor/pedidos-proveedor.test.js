@@ -150,6 +150,64 @@ describe('POST /api/pedidos-proveedor', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('El pedido debe incluir al menos un item.');
   });
+
+  test('actualiza precio_compra en producto_has_proveedor con el precio_unitario del item', async () => {
+    // Usa una relación producto-proveedor ya existente en producto_has_proveedor:
+    // el UPDATE del servicio no afecta filas (se ignora silenciosamente) si la
+    // relación no existe, así que se necesita una fila real para verificar el efecto.
+    const [[relacion]] = await pool.query(
+      'SELECT producto_id_producto, proveedor_id_proveedor, precio_compra FROM producto_has_proveedor LIMIT 1'
+    );
+    const { producto_id_producto, proveedor_id_proveedor, precio_compra: precioOriginal } = relacion;
+
+    const [[productoOriginal]] = await pool.query(
+      'SELECT valor_neto FROM producto WHERE id_producto = ?',
+      [producto_id_producto]
+    );
+
+    // Precio distinto al actual para comprobar que realmente cambia, no que ya coincidía.
+    const nuevoPrecio = Number(precioOriginal) + 1234;
+
+    const res = await request(app)
+      .post('/api/pedidos-proveedor')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        proveedor_id_proveedor,
+        usuario_trab_id: adminId,
+        estado:          'pendiente',
+        valor_total:     nuevoPrecio * 3,
+        items: [
+          {
+            producto_id_producto,
+            cantidad:        3,
+            precio_unitario: nuevoPrecio,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    const pedidoId = res.body.pedido.id_pedido_prov;
+
+    const [[relacionActualizada]] = await pool.query(
+      'SELECT precio_compra FROM producto_has_proveedor WHERE producto_id_producto = ? AND proveedor_id_proveedor = ?',
+      [producto_id_producto, proveedor_id_proveedor]
+    );
+
+    expect(Number(relacionActualizada.precio_compra)).toBe(nuevoPrecio);
+
+    // Limpieza: se elimina el pedido creado y se restauran precio_compra y valor_neto
+    // a sus valores originales, ya que el servicio los modifica como efecto colateral
+    // (INSERT en producto_has_proveedor y en producto ambos ocurren dentro de create()).
+    await pool.query('DELETE FROM pedido_proveedor WHERE id_pedido_prov = ?', [pedidoId]);
+    await pool.query(
+      'UPDATE producto_has_proveedor SET precio_compra = ? WHERE producto_id_producto = ? AND proveedor_id_proveedor = ?',
+      [precioOriginal, producto_id_producto, proveedor_id_proveedor]
+    );
+    await pool.query(
+      'UPDATE producto SET valor_neto = ? WHERE id_producto = ?',
+      [productoOriginal.valor_neto, producto_id_producto]
+    );
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -171,6 +229,156 @@ describe('PUT /api/pedidos-proveedor/:id', () => {
     expect(res.body.message).toBe('Pedido a proveedor actualizado exitosamente.');
     expect(res.body.pedido.estado).toBe('confirmado');
     expect(res.body.pedido.observaciones).toBe('Actualizado por Jest');
+  });
+
+  test('el inventario del producto se incrementa al marcar el pedido como recibido', async () => {
+    // Usa su propio pedido (no idCreado) para no interferir con el describe de
+    // DELETE, que reutiliza el pedido del test anterior.
+    const [bodegaRows] = await pool.query('SELECT id_bodega FROM bodega LIMIT 1');
+    const bodegaId = bodegaRows[0]?.id_bodega;
+    const cantidadPedida = 5;
+
+    const pedidoRes = await request(app)
+      .post('/api/pedidos-proveedor')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        proveedor_id_proveedor: proveedorId,
+        usuario_trab_id:        adminId,
+        estado:                 'pendiente',
+        valor_total:            50000,
+        items: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadPedida,
+            precio_unitario:      5000,
+          },
+        ],
+      });
+
+    expect(pedidoRes.status).toBe(201);
+    const pedidoId = pedidoRes.body.pedido.id_pedido_prov;
+
+    // Se consulta el stock actual (puede no existir fila para este producto+bodega,
+    // en cuyo caso el servicio la crea con INSERT ... ON DUPLICATE KEY UPDATE).
+    const [beforeRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+      [productoId, bodegaId]
+    );
+    const stockAntes = beforeRows.length > 0 ? Number(beforeRows[0].cantidad_disponible) : 0;
+
+    const putRes = await request(app)
+      .put(`/api/pedidos-proveedor/${pedidoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ estado: 'recibido', bodega_id: bodegaId });
+
+    expect(putRes.status).toBe(200);
+    expect(putRes.body.pedido.estado).toBe('recibido');
+
+    const [afterRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+      [productoId, bodegaId]
+    );
+    const stockDespues = Number(afterRows[0].cantidad_disponible);
+
+    expect(stockDespues).toBe(stockAntes + cantidadPedida);
+
+    // Limpieza: el pedido queda en estado 'recibido', así que el endpoint DELETE lo
+    // rechazaría con 409 (ver describe de DELETE); se elimina directo por SQL, lo que
+    // arrastra en cascada sus items. Luego se revierte el incremento de inventario
+    // (o se borra la fila si fue creada por este test) para no dejar stock artificial.
+    await pool.query('DELETE FROM pedido_proveedor WHERE id_pedido_prov = ?', [pedidoId]);
+
+    if (beforeRows.length > 0) {
+      await pool.query(
+        'UPDATE inventario SET cantidad_disponible = cantidad_disponible - ? WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+        [cantidadPedida, productoId, bodegaId]
+      );
+    } else {
+      await pool.query(
+        'DELETE FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+        [productoId, bodegaId]
+      );
+    }
+  });
+});
+
+// ─────────────────────────────────────────────
+// Flujo E2E: crear → recibir → verificar inventario → eliminar
+// ─────────────────────────────────────────────
+describe('Flujo E2E: crear pedido, recibirlo y verificar que no se puede eliminar', () => {
+  test('crear pedido → recibido con bodega → inventario actualizado → DELETE retorna 409', async () => {
+    const [bodegaRows] = await pool.query('SELECT id_bodega FROM bodega LIMIT 1');
+    const bodegaId = bodegaRows[0]?.id_bodega;
+    const cantidadPedida = 4;
+
+    // 1. Crear pedido
+    const pedidoRes = await request(app)
+      .post('/api/pedidos-proveedor')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        proveedor_id_proveedor: proveedorId,
+        usuario_trab_id:        adminId,
+        estado:                 'pendiente',
+        valor_total:            50000,
+        items: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadPedida,
+            precio_unitario:      5000,
+          },
+        ],
+      });
+
+    expect(pedidoRes.status).toBe(201);
+    const pedidoId = pedidoRes.body.pedido.id_pedido_prov;
+
+    const [beforeRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+      [productoId, bodegaId]
+    );
+    const stockAntes = beforeRows.length > 0 ? Number(beforeRows[0].cantidad_disponible) : 0;
+
+    // 2. Cambiar estado a recibido
+    const putRes = await request(app)
+      .put(`/api/pedidos-proveedor/${pedidoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ estado: 'recibido', bodega_id: bodegaId });
+
+    expect(putRes.status).toBe(200);
+    expect(putRes.body.pedido.estado).toBe('recibido');
+
+    // 3. Verificar que el inventario se actualizó
+    const [afterRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+      [productoId, bodegaId]
+    );
+    const stockDespues = Number(afterRows[0].cantidad_disponible);
+    expect(stockDespues).toBe(stockAntes + cantidadPedida);
+
+    // 4. Intentar eliminar el pedido ya recibido → 409
+    const deleteRes = await request(app)
+      .delete(`/api/pedidos-proveedor/${pedidoId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(deleteRes.status).toBe(409);
+    expect(deleteRes.body.message).toBe('No se puede eliminar un pedido ya recibido');
+
+    // Limpieza: el DELETE del paso 4 fue rechazado (correctamente), así que el pedido
+    // sigue existiendo; se elimina directo por SQL (cascada a items) y se revierte
+    // el incremento de inventario para no dejar stock artificial.
+    await pool.query('DELETE FROM pedido_proveedor WHERE id_pedido_prov = ?', [pedidoId]);
+
+    if (beforeRows.length > 0) {
+      await pool.query(
+        'UPDATE inventario SET cantidad_disponible = cantidad_disponible - ? WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+        [cantidadPedida, productoId, bodegaId]
+      );
+    } else {
+      await pool.query(
+        'DELETE FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+        [productoId, bodegaId]
+      );
+    }
   });
 });
 
