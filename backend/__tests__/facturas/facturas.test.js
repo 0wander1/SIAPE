@@ -450,3 +450,202 @@ describe('DELETE /api/facturas/:id', () => {
     expect(res.body.message).toBe('Factura eliminada exitosamente.');
   });
 });
+
+// ─────────────────────────────────────────────
+// Snapshot de precio en factura_item
+// ─────────────────────────────────────────────
+describe('valor_unitario en factura_item', () => {
+  test('no cambia aunque el precio del producto se modifique después de facturar', async () => {
+    const cantidadVendida       = 1;
+    const valorUnitarioFactura  = 10000;
+
+    // Guarda el producto completo: productos.service.update() reemplaza la fila entera
+    // (no un UPDATE parcial), así que se necesitan todos sus campos para restaurarlo
+    // exactamente igual al terminar el test.
+    const [[productoOriginal]] = await pool.query(
+      `SELECT nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega
+       FROM producto WHERE id_producto = ?`,
+      [productoId]
+    );
+    // mysql2 devuelve la columna DATE como objeto Date; se formatea a 'YYYY-MM-DD'
+    // porque enviarlo tal cual por JSON lo serializa a ISO completo con hora,
+    // que MySQL rechaza para una columna DATE ("Incorrect date value").
+    const fechaVencimientoOriginal = productoOriginal.fecha_vencimiento
+      ? productoOriginal.fecha_vencimiento.toISOString().split('T')[0]
+      : null;
+
+    const facturaRes = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-PRECIOSNAP-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal:           valorUnitarioFactura,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadVendida,
+            valor_unitario:       valorUnitarioFactura,
+          },
+        ],
+      });
+
+    expect(facturaRes.status).toBe(201);
+    const facturaId = facturaRes.body.factura.id_factura;
+
+    // Se modifica el precio del producto DESPUÉS de haber facturado, con un valor
+    // claramente distinto al usado en la factura.
+    const nuevoValorNeto     = Number(productoOriginal.valor_neto) + 99999;
+    const nuevoValorDeVenta  = Number(productoOriginal.valor_de_venta) + 99999;
+
+    const putProductoRes = await request(app)
+      .put(`/api/productos/${productoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:   productoOriginal.nombre_producto,
+        valor_neto:        nuevoValorNeto,
+        valor_de_venta:    nuevoValorDeVenta,
+        lote:              productoOriginal.lote,
+        fecha_vencimiento: fechaVencimientoOriginal,
+        bodega_id_bodega:  productoOriginal.bodega_id_bodega,
+      });
+
+    expect(putProductoRes.status).toBe(200);
+
+    const getFacturaRes = await request(app)
+      .get(`/api/facturas/${facturaId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(getFacturaRes.status).toBe(200);
+    // valor_unitario quedó grabado en factura_item al momento de la venta; el cambio
+    // posterior en producto.valor_neto/valor_de_venta no debe alterarlo retroactivamente.
+    expect(Number(getFacturaRes.body.items[0].valor_unitario)).toBe(valorUnitarioFactura);
+
+    // Limpieza: se elimina la factura creada (factura_item cae en cascada) y se
+    // restaura el producto a sus valores originales.
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [facturaId]);
+    await request(app)
+      .put(`/api/productos/${productoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:   productoOriginal.nombre_producto,
+        valor_neto:        productoOriginal.valor_neto,
+        valor_de_venta:    productoOriginal.valor_de_venta,
+        lote:              productoOriginal.lote,
+        fecha_vencimiento: fechaVencimientoOriginal,
+        bodega_id_bodega:  productoOriginal.bodega_id_bodega,
+      });
+  });
+});
+
+// ─────────────────────────────────────────────
+// Flujo E2E: crear factura → stock → pago parcial → pago completo
+// ─────────────────────────────────────────────
+describe('Flujo E2E: crear factura, descontar stock y saldarla con dos pagos', () => {
+  test('crear factura → stock descontado → pago parcial (parcial) → pago restante (pagada)', async () => {
+    const cantidadVendida = 1;
+    const subtotal = 10000;
+    const impuesto = 1900;
+    // total = subtotal + impuesto - descuento = 10000 + 1900 - 0 = 11900
+
+    // 1. Crear factura (venta directa) y verificar stock descontado.
+    const [beforeRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ?',
+      [productoId]
+    );
+    const stockAntes = Number(beforeRows[0].cantidad_disponible);
+
+    const facturaRes = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-E2E-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal,
+        impuesto,
+        descuento:          0,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadVendida,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(facturaRes.status).toBe(201);
+    const facturaId = facturaRes.body.factura.id_factura;
+    const total     = Number(facturaRes.body.factura.total);
+    expect(total).toBe(11900);
+
+    // 2. Verificar que el stock se descontó.
+    const [afterRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ?',
+      [productoId]
+    );
+    const stockDespues = Number(afterRows[0].cantidad_disponible);
+    expect(stockDespues).toBe(stockAntes - cantidadVendida);
+
+    // 3. Registrar pago parcial (no cubre el total) y verificar estado 'parcial'.
+    const montoParcial = total - 1000;
+
+    const pagoParcialRes = await request(app)
+      .post('/api/pagos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        monto_pagado:                 montoParcial,
+        fecha_pago:                   new Date().toISOString().split('T')[0],
+        metodo_pago:                  'transferencia',
+        factura_id_factura:           facturaId,
+        usuario_trab_id_usuario_trab: adminId,
+      });
+
+    expect(pagoParcialRes.status).toBe(201);
+
+    const getParcialRes = await request(app)
+      .get(`/api/facturas/${facturaId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(getParcialRes.status).toBe(200);
+    expect(getParcialRes.body.estado).toBe('parcial');
+
+    // 4. Registrar el pago restante (cubre el saldo pendiente) y verificar estado 'pagada'.
+    const montoRestante = total - montoParcial;
+
+    const pagoCompletoRes = await request(app)
+      .post('/api/pagos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        monto_pagado:                 montoRestante,
+        fecha_pago:                   new Date().toISOString().split('T')[0],
+        metodo_pago:                  'transferencia',
+        factura_id_factura:           facturaId,
+        usuario_trab_id_usuario_trab: adminId,
+      });
+
+    expect(pagoCompletoRes.status).toBe(201);
+
+    const getPagadaRes = await request(app)
+      .get(`/api/facturas/${facturaId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(getPagadaRes.status).toBe(200);
+    expect(getPagadaRes.body.estado).toBe('pagada');
+
+    // Limpieza: se eliminan los pagos y la factura, y se restaura el stock descontado.
+    await pool.query('DELETE FROM pago WHERE factura_id_factura = ?', [facturaId]);
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [facturaId]);
+    await pool.query(
+      'UPDATE inventario SET cantidad_disponible = cantidad_disponible + ? WHERE producto_id_producto = ?',
+      [cantidadVendida, productoId]
+    );
+  });
+});

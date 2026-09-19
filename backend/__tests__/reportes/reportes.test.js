@@ -75,6 +75,44 @@ describe('GET /api/reportes/ventas', () => {
       'Los parámetros fecha_inicio y fecha_fin son requeridos (formato: YYYY-MM-DD).'
     );
   });
+
+  test('excluye facturas anuladas del cálculo de ingresos_totales', async () => {
+    const fecha_inicio = '2025-01-01';
+    const fecha_fin    = '2025-12-31';
+
+    const antes = await request(app)
+      .get('/api/reportes/ventas')
+      .query({ fecha_inicio, fecha_fin, agrupacion: 'semana' })
+      .set('Authorization', `Bearer ${token}`);
+
+    const ingresosAntes = Number(antes.body.resumen.ingresos_totales);
+
+    // Se inserta directo por SQL (en vez de por POST /api/facturas) porque el objetivo
+    // es una factura 'anulada' dentro del rango de fechas consultado; la creación vía
+    // API exige productos/pedido que son irrelevantes para lo que se está probando aquí.
+    const [[trabajador]] = await pool.query(
+      'SELECT id_usuario_trab FROM usuario_trab LIMIT 1'
+    );
+
+    const [insertResult] = await pool.query(
+      `INSERT INTO factura
+         (numero_factura, fecha_emision, fecha_vencimiento, subtotal, impuesto, descuento, total, estado, usuario_trab_id)
+       VALUES (?, '2025-06-15', '2025-07-15', 100000, 0, 0, 100000, 'anulada', ?)`,
+      [`JEST-ANULADA-${Date.now()}`, trabajador.id_usuario_trab]
+    );
+    const facturaId = insertResult.insertId;
+
+    const despues = await request(app)
+      .get('/api/reportes/ventas')
+      .query({ fecha_inicio, fecha_fin, agrupacion: 'semana' })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(despues.status).toBe(200);
+    // ingresos_totales no debe cambiar: la factura anulada (total = 100000) no debe sumarse.
+    expect(Number(despues.body.resumen.ingresos_totales)).toBe(ingresosAntes);
+
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [facturaId]);
+  });
 });
 
 // ─────────────────────────────────────────────
