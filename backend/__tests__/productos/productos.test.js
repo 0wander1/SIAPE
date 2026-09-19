@@ -178,4 +178,17 @@ describe('DELETE /api/productos/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Producto eliminado exitosamente.');
   });
+
+  test('el registro de inventario del producto eliminado también se elimina', async () => {
+    // fk_inventario_producto tiene ON DELETE CASCADE (ver SHOW CREATE TABLE inventario),
+    // por lo que borrar el producto elimina automáticamente su fila en inventario
+    // sin que el servicio tenga que hacerlo explícitamente. Depende del test anterior
+    // ("200 eliminando el producto creado"), que ya ejecutó el DELETE sobre idCreado.
+    const [rows] = await pool.query(
+      'SELECT * FROM inventario WHERE producto_id_producto = ?',
+      [idCreado]
+    );
+
+    expect(rows).toHaveLength(0);
+  });
 });

@@ -136,6 +136,41 @@ describe('POST /api/proveedores', () => {
 });
 
 // ─────────────────────────────────────────────
+// PUT /api/proveedores/:id
+// ─────────────────────────────────────────────
+describe('PUT /api/proveedores/:id', () => {
+  test('retorna 409 al actualizar con un NIT que ya pertenece a otro proveedor', async () => {
+    // Se crea un segundo proveedor propio (no idCreado) solo para poseer un NIT
+    // distinto ya registrado, y así forzar el conflicto al intentar asignárselo
+    // a idCreado mediante PUT.
+    const OTRO_NIT = `NIT_JEST_OTRO_${Date.now()}`;
+
+    const otroRes = await request(app)
+      .post('/api/proveedores')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_proveedor: 'Proveedor Jest Otro',
+        NIT:              OTRO_NIT,
+        id_usuario_trab:  adminId,
+      });
+
+    expect(otroRes.status).toBe(201);
+    const otroId = otroRes.body.proveedor.id_proveedor;
+
+    const res = await request(app)
+      .put(`/api/proveedores/${idCreado}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ NIT: OTRO_NIT });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('Ya existe un proveedor con ese NIT.');
+
+    // Limpieza: se elimina el proveedor auxiliar creado solo para esta prueba.
+    await pool.query('DELETE FROM proveedor WHERE id_proveedor = ?', [otroId]);
+  });
+});
+
+// ─────────────────────────────────────────────
 // DELETE /api/proveedores/:id
 // ─────────────────────────────────────────────
 describe('DELETE /api/proveedores/:id', () => {

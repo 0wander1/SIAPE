@@ -140,6 +140,37 @@ describe('POST /api/pagos', () => {
       'Faltan campos requeridos: monto_pagado, fecha_pago, metodo_pago, factura_id_factura, usuario_trab_id_usuario_trab.'
     );
   });
+
+  test('retorna 422 cuando el monto supera el saldo pendiente de la factura', async () => {
+    // Se recalcula el saldo pendiente en el momento del test, ya que el test
+    // anterior ("201 con datos válidos") ya registró un pago parcial sobre
+    // facturaId, reduciendo el saldo original calculado en beforeAll.
+    const [[{ total }]] = await pool.query(
+      'SELECT total FROM factura WHERE id_factura = ?',
+      [facturaId]
+    );
+    const [[{ suma }]] = await pool.query(
+      'SELECT COALESCE(SUM(monto_pagado), 0) AS suma FROM pago WHERE factura_id_factura = ?',
+      [facturaId]
+    );
+    const saldoPendiente = Number(total) - Number(suma);
+
+    const res = await request(app)
+      .post('/api/pagos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        monto_pagado:                  saldoPendiente + 1000,
+        fecha_pago:                    new Date().toISOString().split('T')[0],
+        metodo_pago:                   'transferencia',
+        factura_id_factura:            facturaId,
+        usuario_trab_id_usuario_trab:  adminId,
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body.message).toBe(
+      `El monto supera el saldo pendiente (${saldoPendiente})`
+    );
+  });
 });
 
 // ─────────────────────────────────────────────

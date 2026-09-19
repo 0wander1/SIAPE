@@ -64,8 +64,13 @@ async function update(req, res, next) {
     }
     return res.status(200).json({ message: 'Proveedor actualizado exitosamente.', proveedor: actualizado });
   } catch (error) {
-    // Cualquier error del servicio (incluido 409 por NIT duplicado en el UPDATE)
-    // se delega al errorHandler global, que usa error.status para el código HTTP.
+    // El servicio no valida el NIT con un SELECT previo en update() (a diferencia de
+    // create()), así que el conflicto llega aquí como ER_DUP_ENTRY crudo de MySQL,
+    // sin error.status seteado. Se mapea explícitamente a 409, igual que en
+    // facturas.controller.js, en lugar de dejar que el errorHandler caiga a 500.
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Ya existe un proveedor con ese NIT.' });
+    }
     next(error);
   }
 }
