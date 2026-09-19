@@ -152,6 +152,60 @@ describe('POST /api/facturas', () => {
     idCreado = res.body.factura.id_factura;
   });
 
+  test('la cantidad disponible en inventario disminuye tras crear la factura', async () => {
+    // Usa su propia factura (no idCreado) para no interferir con los describe de
+    // PUT/DELETE, que reutilizan la factura del test anterior.
+    const cantidadVendida = 1;
+
+    const [beforeRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ?',
+      [productoId]
+    );
+    // Number(): mysql2 devuelve las columnas DECIMAL como string (p. ej. "75.00").
+    const stockAntes = Number(beforeRows[0].cantidad_disponible);
+
+    const res = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-STOCKCHECK-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal:           10000,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadVendida,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+
+    const [afterRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ?',
+      [productoId]
+    );
+    const stockDespues = Number(afterRows[0].cantidad_disponible);
+
+    expect(stockDespues).toBe(stockAntes - cantidadVendida);
+
+    // Limpieza: se elimina la factura creada (factura_item cae en cascada) y se
+    // restaura el stock descontado, para que el test de "stock insuficiente"
+    // (que consulta cantidad_disponible real) no se vea afectado por este test.
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [
+      res.body.factura.id_factura,
+    ]);
+    await pool.query(
+      'UPDATE inventario SET cantidad_disponible = cantidad_disponible + ? WHERE producto_id_producto = ?',
+      [cantidadVendida, productoId]
+    );
+  });
+
   test('retorna 400 sin productos en venta directa', async () => {
     // Sin pedido_id_pedido y con productos vacío: el servicio lanza error status 400
     // antes de abrir transacción. El controlador lo propaga al errorHandler → 400.
@@ -172,6 +226,72 @@ describe('POST /api/facturas', () => {
       'Para venta directa se requiere al menos un producto'
     );
   });
+
+  test('retorna 409 con numero_factura duplicado', async () => {
+    // Reutiliza NUMERO_FACTURA, ya insertado por el test anterior ("201 con datos
+    // válidos"), para violar el índice UNIQUE de la tabla factura. MySQL lanza
+    // ER_DUP_ENTRY, que el controlador mapea explícitamente a 409.
+    const res = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     NUMERO_FACTURA,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal:           10000,
+        impuesto:           1900,
+        descuento:          0,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             1,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toHaveProperty('message');
+  });
+
+  test('retorna 400 cuando la cantidad solicitada supera el stock disponible', async () => {
+    // Se consulta el stock actual en lugar de asumir un valor fijo, ya que los
+    // tests anteriores de este describe pudieron modificarlo. Se pide una unidad
+    // más de la disponible para forzar la validación de stock insuficiente,
+    // que el servicio verifica dentro de la transacción antes del UPDATE.
+    const [invRows] = await pool.query(
+      'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ?',
+      [productoId]
+    );
+    const stockDisponible = invRows[0].cantidad_disponible;
+
+    const res = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-STOCK-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        subtotal:           10000,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             stockDisponible + 1,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      `Stock insuficiente para el producto ${productoId}`
+    );
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -188,6 +308,130 @@ describe('PUT /api/facturas/:id', () => {
     expect(res.body.message).toBe('Factura actualizada exitosamente.');
     expect(res.body.factura.estado).toBe('pagada');
     expect(res.body.factura).toHaveProperty('items');
+  });
+
+  test('el estado cambia a pagada automáticamente al registrar un pago que cubre el total', async () => {
+    // El cambio automático de estado ocurre en pagos.service.js (paso 5), disparado
+    // por POST /api/pagos, no por este PUT. Se agrupa aquí porque documenta una
+    // transición de estado de la factura. Se usa una factura propia (no idCreado)
+    // para no interferir con el describe de DELETE.
+    const cantidadVendida = 1;
+
+    const facturaRes = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-PAGOSTATE-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal:           10000,
+        impuesto:           1900,
+        descuento:          0,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadVendida,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(facturaRes.status).toBe(201);
+    const facturaId = facturaRes.body.factura.id_factura;
+    const total     = Number(facturaRes.body.factura.total); // 10000 + 1900 - 0 = 11900
+
+    const pagoRes = await request(app)
+      .post('/api/pagos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        monto_pagado:                 total,
+        fecha_pago:                   new Date().toISOString().split('T')[0],
+        metodo_pago:                  'transferencia',
+        factura_id_factura:           facturaId,
+        usuario_trab_id_usuario_trab: adminId,
+      });
+
+    expect(pagoRes.status).toBe(201);
+
+    const getRes = await request(app)
+      .get(`/api/facturas/${facturaId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.estado).toBe('pagada');
+
+    // Limpieza: se elimina el pago y la factura, y se restaura el stock descontado.
+    await pool.query('DELETE FROM pago WHERE id_pago = ?', [pagoRes.body.pago.id_pago]);
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [facturaId]);
+    await pool.query(
+      'UPDATE inventario SET cantidad_disponible = cantidad_disponible + ? WHERE producto_id_producto = ?',
+      [cantidadVendida, productoId]
+    );
+  });
+
+  test('el estado cambia a parcial automáticamente al registrar un pago que no cubre el total', async () => {
+    // Mismo mecanismo automático de pagos.service.js (paso 5): si el saldo
+    // resultante es mayor a 0, el estado queda en 'parcial'. Se usa una factura
+    // propia (no idCreado) para no interferir con el describe de DELETE.
+    const cantidadVendida = 1;
+
+    const facturaRes = await request(app)
+      .post('/api/facturas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        numero_factura:     `JEST-PAGOPARCIAL-${Date.now()}`,
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        subtotal:           10000,
+        impuesto:           1900,
+        descuento:          0,
+        estado:             'emitida',
+        usuario_trab_id:    adminId,
+        cliente_id_cliente: clienteId,
+        productos: [
+          {
+            producto_id_producto: productoId,
+            cantidad:             cantidadVendida,
+            valor_unitario:       10000,
+          },
+        ],
+      });
+
+    expect(facturaRes.status).toBe(201);
+    const facturaId = facturaRes.body.factura.id_factura;
+    const total     = Number(facturaRes.body.factura.total); // 10000 + 1900 - 0 = 11900
+    const montoParcial = total - 1000; // deja saldo pendiente > 0
+
+    const pagoRes = await request(app)
+      .post('/api/pagos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        monto_pagado:                 montoParcial,
+        fecha_pago:                   new Date().toISOString().split('T')[0],
+        metodo_pago:                  'transferencia',
+        factura_id_factura:           facturaId,
+        usuario_trab_id_usuario_trab: adminId,
+      });
+
+    expect(pagoRes.status).toBe(201);
+
+    const getRes = await request(app)
+      .get(`/api/facturas/${facturaId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.estado).toBe('parcial');
+
+    // Limpieza: se elimina el pago y la factura, y se restaura el stock descontado.
+    await pool.query('DELETE FROM pago WHERE id_pago = ?', [pagoRes.body.pago.id_pago]);
+    await pool.query('DELETE FROM factura WHERE id_factura = ?', [facturaId]);
+    await pool.query(
+      'UPDATE inventario SET cantidad_disponible = cantidad_disponible + ? WHERE producto_id_producto = ?',
+      [cantidadVendida, productoId]
+    );
   });
 });
 
