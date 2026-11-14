@@ -86,6 +86,18 @@ describe('requireAdmin', () => {
     expect(res.status).toBe(403);
     expect(res.body.message).toBe('No tienes permisos para realizar esta acción.');
   });
+
+  test('DELETE /api/pedidos/:id con token no administrador responde 403', async () => {
+    // DELETE /api/pedidos/:id lleva requireAdmin: un no administrador no puede eliminar
+    // pedidos. requireAdmin responde antes del controlador, así que el pedido 1 no
+    // necesita existir y no se toca la base de datos.
+    const res = await request(app)
+      .delete('/api/pedidos/1')
+      .set('Authorization', `Bearer ${tokenNoAdmin}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('No tienes permisos para realizar esta acción.');
+  });
 });
 
 // ─────────────────────────────────────────────

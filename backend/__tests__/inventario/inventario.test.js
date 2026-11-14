@@ -8,8 +8,9 @@ jest.mock('../../src/services/email.service', () => ({
 }));
 
 let token;
-let productoId; // Producto sin combinación en inventario, sin filas en factura_item ni pedido_proveedor_item.
-let bodegaId;   // Bodega de la combinación libre hallada.
+let productoId; // Producto propio creado en beforeAll con POST /api/productos.
+let bodegaId;   // Primera bodega: donde POST /api/productos crea el inventario inicial del producto.
+let bodegaId2;  // Segunda bodega, distinta de bodegaId.
 let idCreado;   // PK del registro de inventario creado en el test POST.
 
 beforeAll(async () => {
@@ -31,31 +32,52 @@ beforeAll(async () => {
   token = verifyRes.body.token;
   jest.restoreAllMocks();
 
-  // Busca un producto + bodega cuya combinación no exista en inventario y cuyo
-  // producto no tenga filas en factura_item ni en pedido_proveedor_item, para
-  // que el DELETE 200 pueda borrar el producto sin error de FK referencial.
-  const [rows] = await pool.query(`
-    SELECT p.id_producto, b.id_bodega
-    FROM producto p
-    CROSS JOIN bodega b
-    LEFT JOIN inventario i
-      ON i.producto_id_producto = p.id_producto
-     AND i.bodega_id_bodega = b.id_bodega
-    LEFT JOIN factura_item fi
-      ON fi.producto_id_producto = p.id_producto
-    LEFT JOIN pedido_proveedor_item ppi
-      ON ppi.producto_id_producto = p.id_producto
-    WHERE i.id_inventario          IS NULL
-      AND fi.factura_id_factura     IS NULL
-      AND ppi.pedido_prov_id        IS NULL
-    LIMIT 1
-  `);
+  // Se necesitan dos bodegas distintas: POST /api/productos crea el inventario inicial
+  // del producto en bodegaId, así que bodegaId2 queda libre para otra combinación.
+  const [bodegas] = await pool.query('SELECT id_bodega FROM bodega LIMIT 2');
+  if (bodegas.length < 2) {
+    throw new Error(
+      `inventario.test.js necesita al menos 2 bodegas en la base de datos; se encontraron ${bodegas.length}.`
+    );
+  }
+  bodegaId  = bodegas[0].id_bodega;
+  bodegaId2 = bodegas[1].id_bodega;
 
-  productoId = rows[0]?.id_producto;
-  bodegaId   = rows[0]?.id_bodega;
+  // Se crea un producto propio en lugar de reutilizar uno existente, para que los
+  // tests no dependan de datos reales ni borren productos que ya estaban en la BD.
+  const productoRes = await request(app)
+    .post('/api/productos')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      nombre_producto:  `JEST-INV-${Date.now()}`,
+      valor_neto:       1,
+      valor_de_venta:   2,
+      bodega_id_bodega: bodegaId,
+      cantidad:         0,
+      cantidad_minima:  0,
+    });
+
+  if (productoRes.status !== 201) {
+    throw new Error(
+      `No se pudo crear el producto de prueba con POST /api/productos: respuesta ${productoRes.status}.`
+    );
+  }
+  productoId = productoRes.body.producto.id_producto;
 });
 
 afterAll(async () => {
+  // Limpieza del producto de prueba y de todos sus registros de inventario, por si
+  // algún test falló antes del DELETE. Se borra primero inventario por la FK hacia
+  // producto. Si el DELETE ya los eliminó, ambas consultas no afectan ninguna fila.
+  if (productoId) {
+    try {
+      await pool.query('DELETE FROM inventario WHERE producto_id_producto = ?', [productoId]);
+      await pool.query('DELETE FROM producto WHERE id_producto = ?', [productoId]);
+    } catch (error) {
+      console.error('No se pudo limpiar el producto de prueba de inventario.test.js:', error);
+    }
+  }
+
   await pool.end();
 });
 
@@ -120,14 +142,14 @@ describe('POST /api/inventario', () => {
         cantidad_reservada:   0,
         cantidad_minima:      5,
         producto_id_producto: productoId,
-        bodega_id_bodega:     bodegaId,
+        bodega_id_bodega:     bodegaId2,
       });
 
     expect(res.status).toBe(201);
     expect(res.body.message).toBe('Registro de inventario creado exitosamente.');
     expect(res.body.inventario).toHaveProperty('id_inventario');
     expect(res.body.inventario.producto_id_producto).toBe(productoId);
-    expect(res.body.inventario.bodega_id_bodega).toBe(bodegaId);
+    expect(res.body.inventario.bodega_id_bodega).toBe(bodegaId2);
     expect(Number(res.body.inventario.cantidad_disponible)).toBe(20);
 
     idCreado = res.body.inventario.id_inventario;

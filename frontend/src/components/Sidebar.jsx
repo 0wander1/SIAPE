@@ -55,7 +55,8 @@ function Sidebar() {
           Filtro de navegación por rol:
           - Si el usuario es admin (isAdmin() === true) se muestran todos los items.
           - Si no lo es, se excluyen las rutas declaradas en ADMIN_ONLY_PATHS.
-          Esto es solo ocultamiento visual; la protección real está en AdminRoute (App.jsx).
+          Ocultar items es solo visual; la protección real está en el backend, que exige
+          rol de administrador en las rutas de escritura.
         */}
         {navItems
           .filter((item) => isAdmin() || !ADMIN_ONLY_PATHS.includes(item.path))

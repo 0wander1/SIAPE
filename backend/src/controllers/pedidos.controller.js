@@ -38,21 +38,23 @@ async function create(req, res, next) {
     // Se desestructuran solo los campos obligatorios para validarlos explícitamente.
     // Los campos opcionales (fecha_entrega_estimada, observaciones, etc.) no se validan
     // aquí porque el servicio les asigna null por defecto si no vienen en el body.
-    const { cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido, usuario_trab_id } = req.body;
+    const { cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido } = req.body;
 
     // Validación de presencia de todos los campos requeridos antes de llegar al servicio.
     // valor_total se comprueba con === undefined/null en lugar de !valor_total porque
     // el valor 0 es falsy en JavaScript pero puede ser un monto válido en ciertos contextos.
-    if (!cliente_id_usuario_cli || !producto_id_producto || !cantidad || !estado || valor_total === undefined || valor_total === null || !direccion_pedido || !usuario_trab_id) {
+    if (!cliente_id_usuario_cli || !producto_id_producto || !cantidad || !estado || valor_total === undefined || valor_total === null || !direccion_pedido) {
       return res.status(400).json({
-        message: 'Faltan campos requeridos: cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido, usuario_trab_id.',
+        message: 'Faltan campos requeridos: cliente_id_usuario_cli, producto_id_producto, cantidad, estado, valor_total, direccion_pedido.',
       });
     }
 
-    // Se pasa req.body completo al servicio para que también reciba los campos opcionales.
+    // Se pasa req.body al servicio (para que también reciba los campos opcionales) con
+    // usuario_trab_id sobrescrito por req.user.id, el id del token, para que el cliente
+    // no pueda registrar el pedido a nombre de otro trabajador.
     // HTTP 201 Created indica que se generó un nuevo recurso, a diferencia de 200 que
     // solo confirma éxito sin implicar creación.
-    const nuevo = await pedidosService.create(req.body);
+    const nuevo = await pedidosService.create({ ...req.body, usuario_trab_id: req.user.id });
     return res.status(201).json({ message: 'Pedido creado exitosamente.', pedido: nuevo });
   } catch (error) {
     next(error);

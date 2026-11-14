@@ -4,6 +4,9 @@ const pedidosController = require('../controllers/pedidos.controller');
 // Authorization antes de que la petición llegue al controlador. Se aplica
 // individualmente a cada ruta para proteger todo el recurso /api/pedidos.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la creación, edición y eliminación (POST, PUT, DELETE) a
+// administradores. Las rutas GET solo exigen una sesión válida (verifyToken).
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -19,21 +22,22 @@ router.get('/:id',  verifyToken, pedidosController.getById);
 
 // POST /api/pedidos
 // Crea un nuevo pedido externo. El cuerpo JSON debe incluir todos los campos obligatorios
-// (cliente, producto, cantidad, estado, valor_total, dirección y usuario_trab_id).
+// (cliente, producto, cantidad, estado, valor_total y dirección). usuario_trab_id no
+// se lee del body: el controlador lo toma del token del usuario autenticado (req.user.id).
 // El servicio también inserta automáticamente un registro en la tabla "tiempo" y vincula
 // ambas filas en la misma transacción para garantizar la integridad de los datos.
-router.post('/',    verifyToken, pedidosController.create);
+router.post('/',    verifyToken, requireAdmin, pedidosController.create);
 
 // PUT /api/pedidos/:id
 // Actualiza uno o varios campos de un pedido existente. Solo se modifican los campos
 // que vengan en el body y estén en la lista blanca del servicio. Si el campo "estado"
 // cambia a "entregado", el servicio establece automáticamente fecha_entrega_real = NOW().
-router.put('/:id',  verifyToken, pedidosController.update);
+router.put('/:id',  verifyToken, requireAdmin, pedidosController.update);
 
 // DELETE /api/pedidos/:id
 // Elimina un pedido siempre que no tenga una factura asociada. Si la tiene, el servicio
 // lanza un error 409 Conflict para preservar la integridad referencial de la BD.
-router.delete('/:id', verifyToken, pedidosController.remove);
+router.delete('/:id', verifyToken, requireAdmin, pedidosController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/pedidos",
 // haciendo que las rutas completas sean /api/pedidos, /api/pedidos/:id, etc.

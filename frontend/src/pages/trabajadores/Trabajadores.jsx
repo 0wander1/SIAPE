@@ -3,10 +3,14 @@
 // ser reducido y el formato de tarjeta comunica mejor la identidad de cada persona.
 //
 // Acceso exclusivo para administradores: esta ruta está envuelta en <AdminRoute>
-// dentro de App.jsx, que verifica que user.cargo === 'admin' antes de renderizarla.
+// dentro de App.jsx, que verifica el cargo con esAdmin (utils/roles.js) antes de
+// renderizarla; esAdmin no distingue mayúsculas ni espacios alrededor ('Admin' cuenta).
 // Si un usuario sin ese cargo intenta acceder directamente por URL, AdminRoute lo
 // redirige al dashboard. Por eso este componente no importa useRole ni aplica
-// ningún control de visibilidad propio: la protección ya ocurrió más arriba en el árbol.
+// ningún control de visibilidad propio: ya se filtró más arriba en el árbol.
+// Ese filtro es solo de interfaz; la protección real está en el backend, que exige
+// rol de administrador para crear y eliminar trabajadores, y para editarlos salvo
+// cuando un trabajador cambia su propia contraseña.
 
 import { useState, useEffect } from 'react';
 import Modal from '../../components/Modal.jsx';

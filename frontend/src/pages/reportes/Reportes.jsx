@@ -1,8 +1,11 @@
 // Página de reportes y métricas del negocio.
 // Acceso exclusivo para administradores: esta ruta está envuelta en <AdminRoute>
-// dentro de App.jsx, que verifica que user.cargo === 'admin' antes de renderizarla.
-// Por eso este componente no importa useRole ni aplica controles propios: la
-// protección ya ocurrió más arriba en el árbol de componentes.
+// dentro de App.jsx, que verifica el cargo con esAdmin (utils/roles.js) antes de
+// renderizarla; esAdmin no distingue mayúsculas ni espacios alrededor ('Admin' cuenta).
+// Por eso este componente no importa useRole ni aplica controles propios: el filtro
+// ya ocurrió más arriba en el árbol de componentes.
+// Esa restricción es solo de interfaz: los endpoints /api/reportes del backend solo
+// exigen una sesión válida (verifyToken), no rol de administrador.
 //
 // Contiene tres secciones independientes:
 //  1. Reporte de Ventas (Node backend): rango de fechas → tarjetas resumen + gráfico.

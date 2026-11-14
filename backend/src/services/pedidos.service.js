@@ -14,7 +14,6 @@ const CAMPOS_PERMITIDOS_UPDATE = [
   'fecha_entrega_estimada',
   'fecha_entrega_real',
   'observaciones',
-  'usuario_trab_id',
   'tiempo_id_tiempo',
 ];
 
