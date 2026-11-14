@@ -298,6 +298,36 @@ async function removeConProducto(id_inventario, id_producto) {
   try {
     await conn.beginTransaction();
 
+    // Verifica que el registro de inventario exista y pertenezca al producto indicado,
+    // para no borrar un producto distinto al del inventario recibido en la URL.
+    const [[registro]] = await conn.query(
+      'SELECT producto_id_producto FROM inventario WHERE id_inventario = ?',
+      [id_inventario]
+    );
+    if (!registro) {
+      await conn.rollback();
+      return false;
+    }
+    if (Number(registro.producto_id_producto) !== Number(id_producto)) {
+      throw Object.assign(
+        new Error('El producto no corresponde al registro de inventario.'),
+        { status: 400 }
+      );
+    }
+
+    // Borrar el producto eliminaría en cascada su inventario en todas las bodegas,
+    // así que solo se permite si este es su único registro de inventario.
+    const [[{ total }]] = await conn.query(
+      'SELECT COUNT(*) AS total FROM inventario WHERE producto_id_producto = ? AND id_inventario <> ?',
+      [id_producto, id_inventario]
+    );
+    if (total > 0) {
+      throw Object.assign(
+        new Error('No se puede eliminar el producto porque tiene inventario en otras bodegas.'),
+        { status: 409 }
+      );
+    }
+
     await conn.query('DELETE FROM producto  WHERE id_producto   = ?', [id_producto]);
     await conn.query('DELETE FROM inventario WHERE id_inventario = ?', [id_inventario]);
 

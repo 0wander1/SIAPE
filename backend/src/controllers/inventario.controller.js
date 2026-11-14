@@ -90,6 +90,11 @@ async function update(req, res, next) {
 
 // Elimina el registro de inventario y su producto asociado en una sola transacción.
 // id_inventario proviene de req.params.id; producto_id_producto debe enviarse en el body.
+// Respuestas:
+//   400 — falta producto_id_producto, o el producto no corresponde al registro.
+//   404 — el registro de inventario no existe.
+//   409 — el producto tiene inventario en otras bodegas o registros asociados.
+//   200 — producto e inventario eliminados.
 async function remove(req, res, next) {
   try {
     const { producto_id_producto } = req.body;
@@ -98,9 +103,15 @@ async function remove(req, res, next) {
       return res.status(400).json({ message: 'Falta el campo requerido: producto_id_producto.' });
     }
 
-    await inventarioService.removeConProducto(req.params.id, producto_id_producto);
+    const eliminado = await inventarioService.removeConProducto(req.params.id, producto_id_producto);
+    if (!eliminado) {
+      return res.status(404).json({ message: 'Registro de inventario no encontrado.' });
+    }
     return res.status(200).json({ message: 'Producto e inventario eliminados exitosamente.' });
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     if (error.status === 409) {
       return res.status(409).json({ message: error.message });
     }

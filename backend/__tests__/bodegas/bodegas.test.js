@@ -144,8 +144,10 @@ describe('PUT /api/bodegas/:id', () => {
 // ─────────────────────────────────────────────
 describe('DELETE /api/bodegas/:id', () => {
   test('retorna 409 con bodega que tiene productos asociados (ID 1)', async () => {
-    // La bodega 1 tiene filas de inventario referenciándola (ON DELETE RESTRICT),
-    // por lo que el DELETE es rechazado por MySQL y el servicio lo traduce a 409.
+    // La bodega 1 tiene productos asignados (producto.bodega_id_bodega). La llave
+    // fk_producto_bodega1 es ON DELETE NO ACTION, así que MySQL rechaza el DELETE con
+    // ER_ROW_IS_REFERENCED_2 y el servicio lo traduce a 409. Su inventario no es la
+    // causa: fk_inventario_bodega es ON DELETE CASCADE y se borraría junto con la bodega.
     const res = await request(app)
       .delete('/api/bodegas/1')
       .set('Authorization', `Bearer ${token}`);

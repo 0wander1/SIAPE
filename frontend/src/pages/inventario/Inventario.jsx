@@ -358,11 +358,11 @@ function Inventario() {
     }
   };
 
-  // ── Eliminación en dos pasos: inventario → producto ───────────────────────
-  // Un registro de inventario tiene llave foránea al producto, por lo que primero
-  // se elimina el registro de inventario y luego el producto asociado.
-  // Invertir el orden causaría un error de integridad referencial en la base de datos.
-  // Si cualquiera de las dos peticiones falla se muestra el error del backend;
+  // ── Eliminación de inventario y producto ──────────────────────────────────
+  // Hace una sola petición DELETE /inventario/:id con producto_id_producto en el body.
+  // El backend borra el registro de inventario y su producto en una transacción, y
+  // responde 409 si el producto tiene inventario en otras bodegas o registros asociados.
+  // Si la petición falla se muestra el mensaje del backend en el banner de error.
   const handleConfirmDelete = async () => {
     const item = confirmDelete;
     setConfirmDelete(null);

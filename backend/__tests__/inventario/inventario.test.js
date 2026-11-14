@@ -226,10 +226,27 @@ describe('DELETE /api/inventario/:id', () => {
     );
   });
 
-  test('retorna 200 eliminando el registro creado', async () => {
-    // removeConProducto elimina producto e inventario en la misma transacción.
-    // El productoId hallado en beforeAll no tiene pedido_externo ni otras FKs activas,
-    // por lo que el DELETE debe completarse sin restricción referencial.
+  test('retorna 409 si el producto tiene inventario en otras bodegas', async () => {
+    // El producto de prueba tiene inventario en bodegaId (creado por POST /api/productos)
+    // y en bodegaId2 (idCreado). Borrar el producto eliminaría en cascada el de bodegaId,
+    // así que removeConProducto rechaza el DELETE.
+    const res = await request(app)
+      .delete(`/api/inventario/${idCreado}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ producto_id_producto: productoId });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('No se puede eliminar el producto porque tiene inventario en otras bodegas.');
+  });
+
+  test('retorna 200 eliminando el último registro de inventario del producto', async () => {
+    // Se borran los demás registros del producto para que idCreado sea el único;
+    // así removeConProducto puede eliminar producto e inventario en la misma transacción.
+    await pool.query(
+      'DELETE FROM inventario WHERE producto_id_producto = ? AND id_inventario <> ?',
+      [productoId, idCreado]
+    );
+
     const res = await request(app)
       .delete(`/api/inventario/${idCreado}`)
       .set('Authorization', `Bearer ${token}`)
@@ -237,5 +254,28 @@ describe('DELETE /api/inventario/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe('Producto e inventario eliminados exitosamente.');
+  });
+
+  test('retorna 404 con registro de inventario inexistente', async () => {
+    // El servicio no encuentra el registro, hace rollback y no borra nada.
+    const res = await request(app)
+      .delete('/api/inventario/999999999')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ producto_id_producto: 1 });
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Registro de inventario no encontrado.');
+  });
+
+  test('retorna 400 si el producto no corresponde al registro', async () => {
+    // El registro 62 existe pero pertenece a otro producto; el servicio lanza el
+    // error antes de cualquier DELETE y hace rollback, sin modificar la BD.
+    const res = await request(app)
+      .delete('/api/inventario/62')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ producto_id_producto: 999999999 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El producto no corresponde al registro de inventario.');
   });
 });
