@@ -44,8 +44,9 @@ async function create(req, res, next) {
       });
     }
 
-    // Se pasa req.body completo para que el servicio reciba también los campos opcionales
-    // capacidad_actual y activa, que tienen valores por defecto definidos en el servicio.
+    // Se pasa req.body completo para que el servicio reciba también el campo opcional
+    // activa, que tiene valor por defecto en el servicio. capacidad_actual ya no se lee
+    // del body: el servicio la guarda en 0 y se calcula desde el inventario.
     const nueva = await bodegasService.create(req.body);
     // HTTP 201 Created: indica que se generó un nuevo registro en la tabla bodega.
     return res.status(201).json({ message: 'Bodega creada exitosamente.', bodega: nueva });

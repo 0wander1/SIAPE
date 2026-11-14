@@ -17,7 +17,7 @@ import styles from './Bodegas.module.css';
 // `estado` parte en true (activa) porque una bodega recién creada estará operativa.
 const emptyForm = {
   descripcion: '', ubicacion: '', ciudad: '', capacidadMaxima: '',
-  capacidadActual: '', tipo: 'seca', estado: true, trabajador: '',
+  tipo: 'seca', estado: true, trabajador: '',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,10 +70,6 @@ function BodegaModal({ onClose, onSave, trabajadores, initialData, isEdit, bodeg
           <FormField label='Capacidad Máxima' required>
             <Input type='number' name='capacidadMaxima' min='1'
               value={form.capacidadMaxima} onChange={handleChange} required />
-          </FormField>
-          <FormField label='Capacidad Actual'>
-            <Input type='number' name='capacidadActual' min='0'
-              value={form.capacidadActual} onChange={handleChange} />
           </FormField>
         </FormRow>
 
@@ -209,7 +205,6 @@ function Bodegas() {
       ubicacion:       b.ubicacion,
       ciudad:          b.ciudad,
       capacidadMaxima: String(b.capacidad_maxima ?? ''),
-      capacidadActual: String(b.capacidad_actual ?? ''),
       tipo:            b.tipo_bodega ?? 'Seca',
       estado:          !!b.activa,
       trabajador:      String(b.usuario_trab_id_responsable ?? ''),
@@ -245,8 +240,6 @@ function Bodegas() {
       ubicacion:                   form.ubicacion,
       ciudad:                      form.ciudad,
       capacidad_maxima:            Number(form.capacidadMaxima),
-      // `|| 0` evita NaN si el campo se deja vacío (capacidad actual es opcional).
-      capacidad_actual:            Number(form.capacidadActual) || 0,
       // El valor del ENUM se envía tal cual; coincide con los literales que acepta MySQL.
       tipo_bodega:                 form.tipo,
       // Convierte el booleano del formulario al TINYINT que espera la columna `activa`.

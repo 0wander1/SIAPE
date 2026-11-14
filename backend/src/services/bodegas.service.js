@@ -6,8 +6,9 @@ const { pool } = require('../config/db');
 //   ubicacion:                   dirección física o referencia geográfica de la bodega.
 //   ciudad:                      ciudad donde se encuentra físicamente la bodega.
 //   capacidad_maxima:            límite absoluto de unidades/volumen que puede almacenar.
-//   capacidad_actual:            unidades actualmente almacenadas; se actualiza cada vez
-//                                que entra o sale mercancía del inventario.
+//   capacidad_actual:            NO está en esta lista: ya no se puede modificar. getAll y
+//                                getById la calculan sumando cantidad_disponible del
+//                                inventario de la bodega; la columna se guarda en 0.
 //   tipo_bodega:                 ENUM en BD con tres valores posibles:
 //                                  'principal'  → bodega central de almacenamiento masivo.
 //                                  'secundaria' → bodega de apoyo o distribución regional.
@@ -26,27 +27,44 @@ const CAMPOS_PERMITIDOS_UPDATE = [
   'ubicacion',
   'ciudad',
   'capacidad_maxima',
-  'capacidad_actual',
   'tipo_bodega',
   'activa',
   'usuario_trab_id_responsable',
 ];
 
 // Retorna todas las bodegas con todos sus campos, ordenadas por id descendente.
-// SELECT * es aceptable aquí porque la tabla bodega no tiene columnas sensibles
-// y el listado completo es el comportamiento esperado por el front-end.
+// capacidad_actual no se toma de la columna guardada en bodega, sino que se calcula
+// como la suma de cantidad_disponible de su inventario (0 si no tiene registros).
+// El alias va después de b.*, y mysql2 conserva la última columna con el mismo
+// nombre, por lo que el valor calculado reemplaza al guardado en la respuesta.
 async function getAll() {
   const [rows] = await pool.query(
-    'SELECT * FROM bodega ORDER BY id_bodega DESC'
+    `SELECT b.*, COALESCE(i.total, 0) AS capacidad_actual
+     FROM bodega b
+     LEFT JOIN (
+       SELECT bodega_id_bodega, SUM(cantidad_disponible) AS total
+       FROM inventario
+       GROUP BY bodega_id_bodega
+     ) i ON i.bodega_id_bodega = b.id_bodega
+     ORDER BY b.id_bodega DESC`
   );
   return rows;
 }
 
-// Retorna una bodega específica por su PK. rows[0] es undefined si no hay resultados,
-// por lo que || null garantiza retornar null explícito para que el controlador genere 404.
+// Retorna una bodega específica por su PK. Igual que getAll, capacidad_actual se
+// calcula como la suma de cantidad_disponible de su inventario (0 si no tiene
+// registros) y el alias, al ir después de b.*, reemplaza a la columna guardada.
+// rows[0] es undefined si no hay resultados, por lo que || null garantiza retornar
+// null explícito para que el controlador genere 404.
 async function getById(id) {
   const [rows] = await pool.query(
-    'SELECT * FROM bodega WHERE id_bodega = ?',
+    `SELECT b.*,
+       COALESCE(
+         (SELECT SUM(cantidad_disponible) FROM inventario WHERE bodega_id_bodega = b.id_bodega),
+         0
+       ) AS capacidad_actual
+     FROM bodega b
+     WHERE b.id_bodega = ?`,
     [id]
   );
   return rows[0] || null;
@@ -59,7 +77,8 @@ async function create(data) {
     ubicacion,
     ciudad,
     capacidad_maxima,
-    capacidad_actual,         // opcional: unidades ya almacenadas al momento de crear la bodega
+    // capacidad_actual no se lee del body: getAll y getById la calculan sumando el
+    // inventario de la bodega, y la columna se guarda siempre en 0 al crearla.
     tipo_bodega,              // ENUM: 'principal' | 'secundaria' | 'transito'
     activa,                   // TINYINT(1): 1 = operativa, 0 = fuera de servicio
     usuario_trab_id_responsable,
@@ -76,10 +95,8 @@ async function create(data) {
         ubicacion,
         ciudad,
         capacidad_maxima,
-        // Si capacidad_actual no se envía en el body, la bodega empieza vacía (0 unidades).
-        // ?? 0 usa nullish coalescing: solo aplica el default si el valor es null o undefined,
-        // permitiendo que se envíe explícitamente 0 sin ser reemplazado.
-        capacidad_actual ?? 0,
+        // capacidad_actual: siempre 0; el valor real se calcula desde el inventario.
+        0,
         // tipo_bodega se pasa tal cual; si el valor no es uno de los tres valores del ENUM
         // ('principal', 'secundaria', 'transito'), MySQL lanzará un error en el INSERT.
         tipo_bodega,
@@ -107,7 +124,7 @@ async function create(data) {
 
 // Actualiza dinámicamente los campos de una bodega presentes en el body.
 // La query SET se construye en tiempo de ejecución para soportar actualizaciones
-// parciales: se puede cambiar solo "activa", solo "capacidad_actual", etc.
+// parciales: se puede cambiar solo "activa", solo "ciudad", etc.
 async function update(id, data) {
   // Se filtran las claves del body contra la lista blanca para descartar campos
   // desconocidos o columnas internas (como id_bodega) que el cliente no debe modificar.

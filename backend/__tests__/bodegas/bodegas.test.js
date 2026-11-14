@@ -165,3 +165,70 @@ describe('DELETE /api/bodegas/:id', () => {
     expect(res.body.message).toBe('Bodega eliminada exitosamente.');
   });
 });
+
+// ─────────────────────────────────────────────
+// capacidad_actual calculada desde el inventario
+// ─────────────────────────────────────────────
+describe('capacidad_actual se calcula desde el inventario', () => {
+  // descripcion distinta a DESCRIPCION_BODEGA por el índice UNIQUE.
+  const DESCRIPCION_CAPACIDAD = `JEST-CAP-${Date.now()}`;
+  let idCapacidad; // PK de la bodega creada en este bloque.
+
+  // Limpieza: se borra la bodega directamente en BD aunque algún test falle.
+  // No tiene inventario, así que el DELETE no choca con ninguna FK.
+  // Este afterAll corre antes que el afterAll global que cierra el pool.
+  afterAll(async () => {
+    if (idCapacidad) {
+      await pool.query('DELETE FROM bodega WHERE id_bodega = ?', [idCapacidad]);
+    }
+  });
+
+  test('POST ignora capacidad_actual del body y GET devuelve 0 sin inventario', async () => {
+    const res = await request(app)
+      .post('/api/bodegas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        descripcion:                  DESCRIPCION_CAPACIDAD,
+        ubicacion:                    'Calle 789',
+        ciudad:                       'Cali',
+        capacidad_maxima:             500,
+        capacidad_actual:             99,
+        tipo_bodega:                  'general',
+        usuario_trab_id_responsable:  adminId,
+      });
+
+    expect(res.status).toBe(201);
+    idCapacidad = res.body.bodega.id_bodega;
+    expect(Number(res.body.bodega.capacidad_actual)).toBe(0);
+
+    const resUno = await request(app)
+      .get(`/api/bodegas/${idCapacidad}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(resUno.status).toBe(200);
+    expect(Number(resUno.body.capacidad_actual)).toBe(0);
+
+    const resTodas = await request(app)
+      .get('/api/bodegas')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(resTodas.status).toBe(200);
+    const enLista = resTodas.body.find((b) => b.id_bodega === idCapacidad);
+    expect(enLista).toBeDefined();
+    expect(Number(enLista.capacidad_actual)).toBe(0);
+  });
+
+  test('PUT ignora capacidad_actual y actualiza los demás campos', async () => {
+    const res = await request(app)
+      .put(`/api/bodegas/${idCapacidad}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        descripcion:      `${DESCRIPCION_CAPACIDAD}-EDIT`,
+        capacidad_actual: 500,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.bodega.descripcion).toBe(`${DESCRIPCION_CAPACIDAD}-EDIT`);
+    expect(Number(res.body.bodega.capacidad_actual)).toBe(0);
+  });
+});
