@@ -30,7 +30,6 @@ async function getById(req, res, next) {
 // de cada modo (unicidad del pedido, stock disponible, items válidos).
 async function create(req, res, next) {
   try {
-    console.log(req.body);
     const { numero_factura, fecha_emision, subtotal, estado, usuario_trab_id } = req.body;
 
     // subtotal se compara con === undefined porque el valor 0 es falsy en JavaScript

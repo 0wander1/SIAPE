@@ -34,7 +34,6 @@ async function getById(req, res, next) {
 // Crea un nuevo pedido externo a partir del cuerpo JSON de la petición.
 async function create(req, res, next) {
   try {
-    console.log('[pedidos.controller] create req.body:', req.body);
 
     // Se desestructuran solo los campos obligatorios para validarlos explícitamente.
     // Los campos opcionales (fecha_entrega_estimada, observaciones, etc.) no se validan

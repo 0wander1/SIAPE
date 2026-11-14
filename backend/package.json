@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "crear-admin": "node scripts/crear-admin.js",
-    "test": "jest --testEnvironment node"
+    "test": "jest --testEnvironment node --runInBand"
   },
   "jest": {
     "testMatch": [

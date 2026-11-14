@@ -10,8 +10,8 @@ jest.mock('../../src/services/email.service', () => ({
   sendVerificationCode: jest.fn().mockResolvedValue(undefined),
 }));
 
-// pqrs.service usa nodemailer directamente (no pasa por email.service), por lo que se
-// mockea aparte para que el controlador no intente una conexión SMTP real en fire-and-forget.
+// pqrs.service envía con Resend por su cuenta (no pasa por email.service), por lo que se
+// mockea aparte para que el controlador no haga una llamada real a la API de Resend.
 jest.mock('../../src/services/pqrs.service', () => ({
   send: jest.fn().mockResolvedValue(undefined),
 }));

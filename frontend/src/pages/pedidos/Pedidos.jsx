@@ -474,9 +474,11 @@ function Pedidos() {
     <div className={styles.page}>
       <div className={styles.topBar}>
         <h2 className={styles.heading}>Pedidos a Proveedores</h2>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
-          + Nuevo Pedido
-        </button>
+        {isAdmin() && (
+          <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+            + Nuevo Pedido
+          </button>
+        )}
       </div>
 
       {errorMsg && (
@@ -531,33 +533,35 @@ function Pedidos() {
                 <td>{formatDate(p.fechaEstimada)}</td>
                 <td className={styles.obs}>{p.observaciones || '-'}</td>
                 <td className={styles.menuCell}>
-                  {isAdmin() && (
-                    <div className={styles.menuWrap}>
-                      <button
-                        className={styles.menuBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpen(menuOpen === p.id_pedido_prov ? null : p.id_pedido_prov);
-                        }}
-                      >⋮</button>
-                      {menuOpen === p.id_pedido_prov && (
-                        <div className={styles.dropdown}>
-                          <button onClick={() => { setVerDetalle(p); setMenuOpen(null); }}>
-                            👁️ Ver Detalles
-                          </button>
-                          <button onClick={() => { setEditando(p); setMenuOpen(null); }}>
-                            ✏️ Editar
-                          </button>
-                          <button
-                            className={styles.dangerItem}
-                            onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
-                          >
-                            🗑️ Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className={styles.menuWrap}>
+                    <button
+                      className={styles.menuBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(menuOpen === p.id_pedido_prov ? null : p.id_pedido_prov);
+                      }}
+                    >⋮</button>
+                    {menuOpen === p.id_pedido_prov && (
+                      <div className={styles.dropdown}>
+                        <button onClick={() => { setVerDetalle(p); setMenuOpen(null); }}>
+                          👁️ Ver Detalles
+                        </button>
+                        {isAdmin() && (
+                          <>
+                            <button onClick={() => { setEditando(p); setMenuOpen(null); }}>
+                              ✏️ Editar
+                            </button>
+                            <button
+                              className={styles.dangerItem}
+                              onClick={() => { setConfirmDelete(p); setMenuOpen(null); }}
+                            >
+                              🗑️ Eliminar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

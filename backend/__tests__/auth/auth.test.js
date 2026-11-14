@@ -4,7 +4,7 @@ const { pool } = require('../../src/config/db');
 
 // Evita que los tests intenten enviar correos reales.
 // El controller despacha el email en fire-and-forget después de responder,
-// pero el transport de nodemailer dejaría handles abiertos si no se mockea.
+// pero sin mock haría una llamada real a la API de Resend y dejaría la petición pendiente.
 jest.mock('../../src/services/email.service', () => ({
   sendVerificationCode: jest.fn().mockResolvedValue(undefined),
 }));

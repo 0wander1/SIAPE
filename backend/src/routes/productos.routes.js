@@ -3,6 +3,9 @@ const productosController = require('../controllers/productos.controller');
 // verifyToken valida el JWT en el header Authorization antes de que la petición
 // alcance el controlador. Se aplica a cada ruta para proteger todo el recurso /api/productos.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe las operaciones de escritura (POST, PUT, DELETE) a administradores.
+// Las rutas GET quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -27,19 +30,19 @@ router.get('/:id',    verifyToken, productosController.getById);
 // crea el registro de inventario inicial asociado en la bodega indicada.
 // Requiere: nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega.
 // Opcionales: lote, fecha_vencimiento, cantidad, cantidad_minima.
-router.post('/',      verifyToken, productosController.create);
+router.post('/',      verifyToken, requireAdmin, productosController.create);
 
 // PUT /api/productos/:id
 // Actualiza todos los campos del producto identificado por :id.
 // A diferencia de inventario, este UPDATE no es parcial: exige los mismos
 // campos obligatorios que el create para mantener la integridad del registro.
-router.put('/:id',    verifyToken, productosController.update);
+router.put('/:id',    verifyToken, requireAdmin, productosController.update);
 
 // DELETE /api/productos/:id
 // Elimina el producto solo si no tiene pedidos externos asociados.
 // Si los tiene, el servicio lanza un error 409 Conflict para preservar
 // la integridad referencial entre producto y pedido_externo.
-router.delete('/:id', verifyToken, productosController.remove);
+router.delete('/:id', verifyToken, requireAdmin, productosController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo "/productos",
 // resultando en rutas completas como /api/productos y /api/productos/:id.

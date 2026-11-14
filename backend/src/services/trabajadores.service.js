@@ -3,6 +3,7 @@
 // verificar la contraseña actual antes de permitir un cambio de contraseña.
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
+const { esAdmin } = require('../middlewares/role.middleware');
 
 // Lista explícita de columnas seguras que se devuelven en todas las consultas SELECT.
 // password_hash y salt NUNCA se incluyen en ninguna respuesta HTTP porque:
@@ -199,7 +200,7 @@ async function update(id, data) {
       [id]
     );
     if (!trab) return null;
-    if (trab.cargo === 'admin') {
+    if (esAdmin(trab.cargo)) {
       throw Object.assign(
         new Error('No se puede cambiar la contraseña de un administrador.'),
         { status: 403 }

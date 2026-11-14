@@ -16,6 +16,7 @@ import Facturas from './pages/facturas/Facturas.jsx';
 import Pagos from './pages/pagos/Pagos.jsx';
 import Productos from './pages/productos/Productos.jsx';
 import Reportes from './pages/reportes/Reportes.jsx';
+import { esAdmin } from './utils/roles.js';
 
 // Comprueba si el usuario tiene sesión activa buscando el JWT en localStorage.
 // Devuelve true si el token existe, false en caso contrario.
@@ -35,7 +36,7 @@ const PrivateRoute = ({ children }) => {
 const isAdmin = () => {
   const raw = localStorage.getItem('siape_user');
   const user = raw ? JSON.parse(raw) : null;
-  return user?.cargo === 'admin';
+  return esAdmin(user?.cargo);
 };
 
 // Guardia de ruta exclusiva para administradores.

@@ -361,9 +361,11 @@ function Proveedores() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button className={styles.btnNew} onClick={() => setShowModal(true)}>
-          + Agregar Proveedor
-        </button>
+        {isAdmin() && (
+          <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+            + Agregar Proveedor
+          </button>
+        )}
       </div>
 
       {/* ── Banner de confirmación de eliminación ────────────────────────────

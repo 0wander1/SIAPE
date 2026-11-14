@@ -1,3 +1,5 @@
+import { esAdmin } from '../utils/roles.js';
+
 // Hook personalizado que expone utilidades de rol para el usuario en sesión.
 // Lee el objeto siape_user guardado en localStorage por el flujo de login
 // y extrae el campo `cargo` para determinar qué permisos tiene el usuario.
@@ -12,10 +14,11 @@ function useRole() {
   const cargo = user?.cargo ?? '';
 
   return {
-    // Función que devuelve true únicamente cuando el cargo del usuario es 'admin'.
+    // Función que devuelve true cuando el cargo del usuario es 'admin', sin distinguir
+    // mayúsculas ni espacios alrededor (ver esAdmin en utils/roles.js).
     // Se expone como función (en lugar de booleano) para que el consumidor
     // pueda invocarla en cualquier momento sin necesidad de re-ejecutar el hook.
-    isAdmin: () => cargo === 'admin',
+    isAdmin: () => esAdmin(cargo),
   };
 }
 

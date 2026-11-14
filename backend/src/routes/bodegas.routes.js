@@ -3,6 +3,9 @@ const bodegasController = require('../controllers/bodegas.controller');
 // verifyToken valida el JWT en el header Authorization antes de que la petición
 // alcance el controlador. Se aplica a cada ruta para proteger todo el recurso /api/bodegas.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe las operaciones de escritura (POST, PUT, DELETE) a administradores.
+// Las rutas GET quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -29,21 +32,21 @@ router.get('/:id',    verifyToken, bodegasController.getById);
 //   - capacidad_actual:           unidades actualmente almacenadas (por defecto 0).
 //   - activa:                     TINYINT(1) que indica si la bodega está operativa
 //                                 (1 = activa, 0 = inactiva); por defecto 1 al crear.
-router.post('/',      verifyToken, bodegasController.create);
+router.post('/',      verifyToken, requireAdmin, bodegasController.create);
 
 // PUT /api/bodegas/:id
 // Actualiza parcialmente una bodega: solo modifica los campos presentes en el body
 // que estén en la lista blanca del servicio. Responde 404 si la bodega no existe.
 // Permite, por ejemplo, cambiar solo el campo "activa" para desactivar una bodega
 // sin necesidad de enviar todos los demás campos.
-router.put('/:id',    verifyToken, bodegasController.update);
+router.put('/:id',    verifyToken, requireAdmin, bodegasController.update);
 
 // DELETE /api/bodegas/:id
 // Elimina la bodega por su PK. Responde 404 si no existía.
 // Si tiene registros de inventario u otras entidades con FK hacia esta bodega y
 // la restricción es ON DELETE RESTRICT, MySQL rechazará el DELETE con un error
 // de integridad que el errorHandler global devolverá como 500.
-router.delete('/:id', verifyToken, bodegasController.remove);
+router.delete('/:id', verifyToken, requireAdmin, bodegasController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/bodegas".
 module.exports = router;

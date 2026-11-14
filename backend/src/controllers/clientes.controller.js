@@ -31,7 +31,6 @@ async function getById(req, res, next) {
 // una transacción que garantiza la atomicidad de la operación.
 async function create(req, res, next) {
   try {
-    console.log(req.body);
     const { nombre_usuario, correo } = req.body;
 
     // Ambos campos son strings; ! es suficiente porque una cadena vacía también

@@ -15,6 +15,7 @@ import FormField, {
 } from '../../components/FormField.jsx';
 import { mockTrabajadores } from '../../utils/mockData.js';
 import api from '../../services/api.js';
+import { esAdmin } from '../../utils/roles.js';
 import styles from './Trabajadores.module.css';
 
 // Valores iniciales del formulario en modo creación.
@@ -41,7 +42,7 @@ function TrabajadorModal({ onClose, onSave, initialData, isEdit, userNameError }
   const [error, setError] = useState('');
   // `isAdmin` controla el checkbox "Es administrador"; cuando está activo
   // deshabilita el select de cargo y fija form.cargo = 'admin'.
-  const [isAdmin, setIsAdmin] = useState((initialData?.cargo ?? '') === 'admin');
+  const [isAdmin, setIsAdmin] = useState(esAdmin(initialData?.cargo));
 
   // Limpia el error en cada pulsación para que no persista después de que
   // el usuario empiece a corregir el campo que lo originó.

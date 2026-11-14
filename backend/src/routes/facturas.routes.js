@@ -3,6 +3,9 @@ const facturasController = require('../controllers/facturas.controller');
 // verifyToken valida el JWT antes de que la petición alcance el controlador.
 // La facturación es una operación crítica que solo usuarios autenticados pueden ejecutar.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la edición y eliminación (PUT, DELETE) a administradores.
+// GET y POST quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -37,13 +40,13 @@ router.post('/',      verifyToken, facturasController.create);
 // Actualiza parcialmente una factura. Si el body modifica subtotal, impuesto o descuento,
 // el servicio recalcula automáticamente el campo "total" combinando los nuevos valores
 // con los actuales almacenados en BD, para que total siempre sea consistente.
-router.put('/:id',    verifyToken, facturasController.update);
+router.put('/:id',    verifyToken, requireAdmin, facturasController.update);
 
 // DELETE /api/facturas/:id
 // Elimina la factura por su PK. Responde 404 si no existía.
 // Si tiene pagos asociados en "pago" con ON DELETE RESTRICT, MySQL rechazará
 // el DELETE y el errorHandler global devolverá 500.
-router.delete('/:id', verifyToken, facturasController.remove);
+router.delete('/:id', verifyToken, requireAdmin, facturasController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/facturas".
 module.exports = router;

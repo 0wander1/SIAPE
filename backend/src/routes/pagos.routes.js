@@ -4,6 +4,9 @@ const pagosController = require('../controllers/pagos.controller');
 // Se aplica a cada ruta porque registrar o modificar pagos es una operación financiera
 // que solo usuarios autenticados del sistema pueden ejecutar.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la edición y eliminación (PUT, DELETE) a administradores.
+// GET y POST quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -42,13 +45,13 @@ router.post('/',      verifyToken, pagosController.create);
 // Solo modifica los campos presentes en el body que estén en la lista blanca del servicio.
 // NOTA: modificar monto_pagado aquí no recalcula el estado de la factura; ese efecto
 // solo ocurre en el create. Si se necesita recalcular, habría que extender este método.
-router.put('/:id',    verifyToken, pagosController.update);
+router.put('/:id',    verifyToken, requireAdmin, pagosController.update);
 
 // DELETE /api/pagos/:id
 // Elimina el pago por su PK. Responde 404 si no existía.
 // No revierte el estado de la factura al eliminar un pago; si fuera necesario,
 // habría que agregar esa lógica en el servicio.
-router.delete('/:id', verifyToken, pagosController.remove);
+router.delete('/:id', verifyToken, requireAdmin, pagosController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/pagos".
 module.exports = router;

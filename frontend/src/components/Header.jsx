@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from './Modal.jsx';
 import FormField, { Input, Select, Textarea, FormActions, BtnPrimary, BtnSecondary } from './FormField.jsx';
 import api from '../services/api.js';
+import useRole from '../hooks/useRole.js';
 import styles from './Header.module.css';
 
 // Mapa de rutas a títulos legibles. useLocation() devuelve el pathname actual
@@ -50,6 +51,7 @@ function PerfilNegocioModal({ onClose }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [msg, setMsg]         = useState(null); // { text, ok }
+  const { isAdmin } = useRole();
 
   useEffect(() => {
     api.get('/negocio')
@@ -92,19 +94,19 @@ function PerfilNegocioModal({ onClose }) {
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <FormField label='Nombre del negocio' required>
-            <Input {...field('nombre')} required />
+            <Input {...field('nombre')} required disabled={!isAdmin()} />
           </FormField>
           <FormField label='NIT' required>
-            <Input {...field('nit')} required />
+            <Input {...field('nit')} required disabled={!isAdmin()} />
           </FormField>
           <FormField label='Dirección'>
-            <Input {...field('direccion')} />
+            <Input {...field('direccion')} disabled={!isAdmin()} />
           </FormField>
           <FormField label='Teléfono'>
-            <Input {...field('telefono')} />
+            <Input {...field('telefono')} disabled={!isAdmin()} />
           </FormField>
           <FormField label='Correo'>
-            <Input type='email' {...field('correo')} />
+            <Input type='email' {...field('correo')} disabled={!isAdmin()} />
           </FormField>
           {msg && (
             <p style={{ margin: 0, fontSize: 13, color: msg.ok ? '#16a34a' : '#dc2626' }}>
@@ -112,8 +114,10 @@ function PerfilNegocioModal({ onClose }) {
             </p>
           )}
           <FormActions>
-            <BtnSecondary type='button' onClick={onClose}>Cancelar</BtnSecondary>
-            <BtnPrimary type='submit' disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</BtnPrimary>
+            <BtnSecondary type='button' onClick={onClose}>{isAdmin() ? 'Cancelar' : 'Cerrar'}</BtnSecondary>
+            {isAdmin() && (
+              <BtnPrimary type='submit' disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</BtnPrimary>
+            )}
           </FormActions>
         </form>
       )}

@@ -30,7 +30,6 @@ async function getById(req, res, next) {
 // antes de invocar al servicio, que además creará el registro de inventario inicial.
 async function create(req, res, next) {
   try {
-    console.log(req.body);
     const { nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega } = req.body;
 
     // valor_neto y valor_de_venta se comparan con == null (que cubre tanto null como

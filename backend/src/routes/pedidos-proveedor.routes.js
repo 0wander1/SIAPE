@@ -5,6 +5,9 @@ const pedidosProveedorController = require('../controllers/pedidos-proveedor.con
 // /api/pedidos-proveedor, ya que gestionar compras a proveedores es una operación
 // administrativa que solo usuarios autenticados pueden ejecutar.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe las operaciones de escritura (POST, PUT, DELETE) a administradores.
+// Las rutas GET quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -26,7 +29,7 @@ router.get('/:id',    verifyToken, pedidosProveedorController.getById);
 // que cada item tenga producto_id_producto y cantidad. El servicio además actualiza
 // el precio de compra en producto_has_proveedor y el valor_neto del producto por
 // cada item recibido. Responde 201 con el pedido completo recién creado.
-router.post('/',      verifyToken, pedidosProveedorController.create);
+router.post('/',      verifyToken, requireAdmin, pedidosProveedorController.create);
 
 // PUT /api/pedidos-proveedor/:id
 // Actualiza los campos del pedido identificado por :id. Cuando el body incluye
@@ -35,14 +38,14 @@ router.post('/',      verifyToken, pedidosProveedorController.create);
 // bodega indicada en bodega_id. Si el pedido ya tenía estado 'recibido', el servicio
 // lanza un error 409 Conflict para evitar duplicar el ingreso al inventario.
 // Responde 404 si el pedido no existe.
-router.put('/:id',    verifyToken, pedidosProveedorController.update);
+router.put('/:id',    verifyToken, requireAdmin, pedidosProveedorController.update);
 
 // DELETE /api/pedidos-proveedor/:id
 // Elimina un pedido a proveedor por su PK. El servicio impide la eliminación si el
 // pedido tiene estado 'recibido', ya que sus items ya incrementaron el inventario y
 // eliminar el pedido dejaría ese movimiento sin trazabilidad; en ese caso responde
 // 409 Conflict. Responde 404 si el pedido no existe.
-router.delete('/:id', verifyToken, pedidosProveedorController.remove);
+router.delete('/:id', verifyToken, requireAdmin, pedidosProveedorController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo
 // "/pedidos-proveedor", resultando en rutas completas como /api/pedidos-proveedor.

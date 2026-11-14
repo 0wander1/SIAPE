@@ -4,6 +4,9 @@ const negocioController = require('../controllers/negocio.controller');
 // alcance el controlador. Se aplica a ambas rutas porque la configuración del negocio
 // es información administrativa que solo usuarios autenticados pueden consultar o modificar.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la modificación de la configuración (PUT) a administradores.
+// GET queda abierta a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -19,7 +22,7 @@ router.get('/', verifyToken, negocioController.get);
 // El servicio ejecuta UPDATE WHERE id_negocio = 1 directamente sobre la fila única;
 // no recibe un :id en la URL porque no hay ambigüedad de registro. Responde 404 si
 // la fila singleton no existe (tabla vacía o sin inicializar).
-router.put('/', verifyToken, negocioController.update);
+router.put('/', verifyToken, requireAdmin, negocioController.update);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/negocio",
 // resultando en las rutas completas /api/negocio para GET y PUT.

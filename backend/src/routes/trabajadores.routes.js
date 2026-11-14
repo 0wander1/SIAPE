@@ -4,6 +4,11 @@ const trabajadoresController = require('../controllers/trabajadores.controller')
 // Se aplica a cada ruta porque la gestión de trabajadores es una operación
 // administrativa que solo usuarios autenticados pueden realizar.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la creación y eliminación de trabajadores (POST, DELETE) a
+// administradores. GET queda abierta a cualquier trabajador autenticado.
+// editarTrabajador protege PUT: un admin puede editar a cualquiera; un trabajador que no
+// es admin solo puede cambiar su propia contraseña (contrasena_actual + nueva_contrasena).
+const { requireAdmin, editarTrabajador } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -25,7 +30,7 @@ router.get('/:id',    verifyToken, trabajadoresController.getById);
 //      hasheada con bcrypt (nunca en texto plano) y la sal individual almacenada.
 // Campos obligatorios: cargo, user_name, password.
 // Campos opcionales: direccion, turno, celular.
-router.post('/',      verifyToken, trabajadoresController.create);
+router.post('/',      verifyToken, requireAdmin, trabajadoresController.create);
 
 // PUT /api/trabajadores/:id
 // Tiene dos modos de operación según los campos del body:
@@ -35,12 +40,12 @@ router.post('/',      verifyToken, trabajadoresController.create);
 //   b) Actualización de perfil: si el body incluye campos de la lista blanca
 //      (cargo, direccion, turno, celular, user_name), los actualiza dinámicamente.
 // Responde 404 si el trabajador no existe.
-router.put('/:id',    verifyToken, trabajadoresController.update);
+router.put('/:id',    verifyToken, editarTrabajador, trabajadoresController.update);
 
 // DELETE /api/trabajadores/:id
 // Elimina el trabajador de "usuario_trab". Responde 404 si no existía.
 // No elimina la fila de "usuario" padre para preservar registros históricos.
-router.delete('/:id', verifyToken, trabajadoresController.remove);
+router.delete('/:id', verifyToken, requireAdmin, trabajadoresController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo "/trabajadores".
 module.exports = router;

@@ -412,9 +412,11 @@ function Productos() {
         </div>
         {/* Asegura que al abrir el modal en modo creación no queden residuos
             de una edición previa en editando/initialData. */}
-        <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
-          + Agregar Producto
-        </button>
+        {isAdmin() && (
+          <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
+            + Agregar Producto
+          </button>
+        )}
       </div>
 
       {/* ── Banner de confirmación de eliminación ────────────────────────────

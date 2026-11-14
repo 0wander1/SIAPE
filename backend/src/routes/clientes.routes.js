@@ -3,6 +3,9 @@ const clientesController = require('../controllers/clientes.controller');
 // verifyToken valida el JWT antes de que la petición alcance el controlador.
 // Se aplica a cada ruta para proteger todo el recurso /api/clientes.
 const { verifyToken } = require('../middlewares/auth.middleware');
+// requireAdmin restringe la edición y eliminación (PUT, DELETE) a administradores.
+// GET y POST quedan abiertas a cualquier trabajador autenticado.
+const { requireAdmin } = require('../middlewares/role.middleware');
 
 const router = Router();
 
@@ -28,14 +31,14 @@ router.post('/',      verifyToken, clientesController.create);
 // en dos tablas, el servicio ejecuta un UPDATE en "usuario" y otro en "cliente"
 // dentro de la misma transacción. Acepta actualización parcial: basta con enviar
 // al menos uno de los dos campos.
-router.put('/:id',    verifyToken, clientesController.update);
+router.put('/:id',    verifyToken, requireAdmin, clientesController.update);
 
 // DELETE /api/clientes/:id
 // Elimina el cliente solo si no tiene pedidos externos asociados (verificación previa
 // con COUNT). Si los tiene, el servicio lanza un error 409 Conflict. Si no, borra
 // primero la fila de "cliente" y luego la de "usuario" en la misma transacción,
 // respetando el orden requerido por las restricciones de FK.
-router.delete('/:id', verifyToken, clientesController.remove);
+router.delete('/:id', verifyToken, requireAdmin, clientesController.remove);
 
 // Se exporta el router para que src/routes/index.js lo monte bajo el prefijo "/clientes".
 module.exports = router;

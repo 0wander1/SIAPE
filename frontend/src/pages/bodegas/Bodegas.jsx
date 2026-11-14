@@ -322,9 +322,11 @@ function Bodegas() {
         </div>
         {/* Resetea editando e initialData antes de abrir el modal para garantizar
             que siempre arranque en modo creación cuando se usa este botón. */}
-        <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
-          + Agregar Bodega
-        </button>
+        {isAdmin() && (
+          <button className={styles.btnNew} onClick={() => { setEditando(null); setInitialData(null); setShowModal(true); }}>
+            + Agregar Bodega
+          </button>
+        )}
       </div>
 
       {/* ── Banner de confirmación de eliminación ────────────────────────────

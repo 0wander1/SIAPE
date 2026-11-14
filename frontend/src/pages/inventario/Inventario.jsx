@@ -446,13 +446,15 @@ function Inventario() {
             style={{ display: 'none' }}
             onChange={handleImport}
           />
-          <button
-            className={styles.btnOutline}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importando}
-          >
-            {importando ? 'Importando...' : '📂 Cargar Excel'}
-          </button>
+          {isAdmin() && (
+            <button
+              className={styles.btnOutline}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importando}
+            >
+              {importando ? 'Importando...' : '📂 Cargar Excel'}
+            </button>
+          )}
 
           {/* Consulta el servlet Java StockCriticoServlet en Tomcat :8080 */}
           <button
