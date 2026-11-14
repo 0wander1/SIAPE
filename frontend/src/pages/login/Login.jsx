@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
 import styles from './Login.module.css';
 
@@ -184,6 +184,14 @@ function Login() {
               </form>
             </>
           )}
+
+          {/* Fuera de los bloques de cada paso para que se vea en ambos. */}
+          <p className={styles.hint}>
+            Al ingresar aceptas la{' '}
+            <Link to='/privacidad' style={{ color: '#2563eb', textDecoration: 'underline' }}>
+              Política de tratamiento de datos personales
+            </Link>
+          </p>
 
         </div>
       </div>

@@ -356,6 +356,7 @@ function Header() {
                 <button onClick={() => openModal('password')}>🔑 Cambiar contraseña</button>
                 <button onClick={() => openModal('negocio')}>🏢 Perfil del negocio</button>
                 <button onClick={() => openModal('pqrs')}>📝 PQRS</button>
+                <button onClick={() => { setDropdownOpen(false); navigate('/privacidad'); }}>🔒 Política de privacidad</button>
                 <hr className={styles.divider} />
                 <button className={styles.logoutItem} onClick={handleLogout}>⎋ Cerrar sesión</button>
               </div>

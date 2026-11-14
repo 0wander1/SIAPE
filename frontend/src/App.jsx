@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import Login from './pages/login/Login.jsx';
+import Privacidad from './pages/privacidad/Privacidad.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
 import Pedidos from './pages/pedidos/Pedidos.jsx';
 import Inventario from './pages/inventario/Inventario.jsx';
@@ -79,8 +80,9 @@ function App() {
     // (URLs limpias sin hash, p. ej. /dashboard en lugar de /#/dashboard).
     <BrowserRouter>
       <Routes>
-        {/* Ruta pública: accesible sin sesión */}
+        {/* Rutas públicas: accesibles sin sesión */}
         <Route path='/login' element={<Login />} />
+        <Route path='/privacidad' element={<Privacidad />} />
 
         {/* Ruta raíz protegida: PrivateRoute verifica la sesión antes de renderizar Layout.
             Layout actúa como shell compartido (barra de navegación, sidebar, etc.) y
