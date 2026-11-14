@@ -109,4 +109,16 @@ describe('PUT /api/negocio', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('Faltan campos requeridos: nombre, nit.');
   });
+
+  test('retorna 400 con correo sin formato válido', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se modifica el registro del negocio en la BD.
+    const res = await request(app)
+      .put('/api/negocio')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ nombre: 'JEST-NEG', nit: '000', correo: 'correosinformato' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El correo no tiene un formato válido.');
+  });
 });

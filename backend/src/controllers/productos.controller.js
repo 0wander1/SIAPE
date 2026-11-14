@@ -1,6 +1,7 @@
 // El controlador valida los datos de entrada HTTP y delega la lógica de negocio
 // al servicio. No contiene consultas SQL ni reglas de dominio.
 const productosService = require('../services/productos.service');
+const { esNumeroNoNegativo } = require('../utils/validaciones');
 
 // Devuelve todos los productos. Un array vacío es 200 válido; no se convierte en 404.
 async function getAll(req, res, next) {
@@ -42,6 +43,22 @@ async function create(req, res, next) {
       });
     }
 
+    if (!esNumeroNoNegativo(valor_neto) || !esNumeroNoNegativo(valor_de_venta)) {
+      return res.status(400).json({
+        message: 'valor_neto y valor_de_venta deben ser números mayores o iguales a cero.',
+      });
+    }
+
+    const { cantidad, cantidad_minima } = req.body;
+    if (
+      (cantidad !== undefined && !esNumeroNoNegativo(cantidad)) ||
+      (cantidad_minima !== undefined && !esNumeroNoNegativo(cantidad_minima))
+    ) {
+      return res.status(400).json({
+        message: 'cantidad y cantidad_minima deben ser números mayores o iguales a cero.',
+      });
+    }
+
     // Se pasa req.body completo para que el servicio reciba también los campos opcionales:
     // lote, fecha_vencimiento, cantidad y cantidad_minima.
     const nuevo = await productosService.create(req.body);
@@ -65,6 +82,12 @@ async function update(req, res, next) {
     if (!nombre_producto || valor_neto == null || valor_de_venta == null || !bodega_id_bodega) {
       return res.status(400).json({
         message: 'Faltan campos requeridos: nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega.',
+      });
+    }
+
+    if (!esNumeroNoNegativo(valor_neto) || !esNumeroNoNegativo(valor_de_venta)) {
+      return res.status(400).json({
+        message: 'valor_neto y valor_de_venta deben ser números mayores o iguales a cero.',
       });
     }
 

@@ -128,6 +128,24 @@ describe('POST /api/productos', () => {
 
     idCreado = res.body.producto.id_producto;
   });
+
+  test('retorna 400 con valor_de_venta negativo', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se inserta ningún registro en la BD.
+    const res = await request(app)
+      .post('/api/productos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:  'JEST-NEG',
+        valor_neto:       10,
+        valor_de_venta:   -5000,
+        bodega_id_bodega: bodegaId,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('valor_neto y valor_de_venta deben ser números mayores o iguales a cero.');
+    expect(res.body).not.toHaveProperty('producto');
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -150,6 +168,23 @@ describe('PUT /api/productos/:id', () => {
     expect(res.body.producto.nombre_producto).toBe('Producto Jest Test Actualizado');
     expect(Number(res.body.producto.valor_neto)).toBe(9000);
     expect(Number(res.body.producto.valor_de_venta)).toBe(13500);
+  });
+
+  test('retorna 400 con valor_de_venta negativo', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se consulta ni modifica ningún registro en la BD.
+    const res = await request(app)
+      .put('/api/productos/99999999')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:  'JEST-NEG',
+        valor_neto:       10,
+        valor_de_venta:   -5000,
+        bodega_id_bodega: bodegaId,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('valor_neto y valor_de_venta deben ser números mayores o iguales a cero.');
   });
 });
 

@@ -1,6 +1,7 @@
 // El controlador valida la entrada HTTP y delega la lógica al servicio.
 // No contiene consultas SQL ni reglas de negocio: esa responsabilidad es del servicio.
 const inventarioService = require('../services/inventario.service');
+const { esNumeroNoNegativo } = require('../utils/validaciones');
 
 // Devuelve todos los registros de inventario con nombre de producto y bodega.
 // Un array vacío es una respuesta 200 válida; no se mapea a 404.
@@ -42,6 +43,17 @@ async function create(req, res, next) {
       });
     }
 
+    const { cantidad_reservada, cantidad_minima } = req.body;
+    if (
+      !esNumeroNoNegativo(cantidad_disponible) ||
+      (cantidad_reservada !== undefined && !esNumeroNoNegativo(cantidad_reservada)) ||
+      (cantidad_minima !== undefined && !esNumeroNoNegativo(cantidad_minima))
+    ) {
+      return res.status(400).json({
+        message: 'Las cantidades deben ser números mayores o iguales a cero.',
+      });
+    }
+
     // Se pasa req.body completo para que el servicio también reciba los campos opcionales
     // (cantidad_reservada, cantidad_minima) si el cliente los envió.
     const nuevo = await inventarioService.create(req.body);
@@ -57,6 +69,14 @@ async function create(req, res, next) {
 // la lista blanca de campos permitidos se controla en el servicio.
 async function update(req, res, next) {
   try {
+    for (const campo of ['cantidad_disponible', 'cantidad_reservada', 'cantidad_minima']) {
+      if (req.body[campo] !== undefined && !esNumeroNoNegativo(req.body[campo])) {
+        return res.status(400).json({
+          message: 'Las cantidades deben ser números mayores o iguales a cero.',
+        });
+      }
+    }
+
     const actualizado = await inventarioService.update(req.params.id, req.body);
     // El servicio retorna null cuando affectedRows === 0, indicando que el id no existe.
     if (!actualizado) {

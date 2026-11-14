@@ -3,6 +3,7 @@
 // La tabla "negocio" almacena un único registro (id_negocio = 1) con los datos
 // de la empresa: nombre, NIT, dirección, teléfono, correo y logo.
 const negocioService = require('../services/negocio.service');
+const { esCorreoValido } = require('../utils/validaciones');
 
 // Devuelve el registro único del negocio. No requiere parámetros de entrada porque
 // el servicio consulta directamente la fila con id_negocio = 1 usando LIMIT 1.
@@ -34,10 +35,18 @@ async function update(req, res, next) {
       return res.status(400).json({ message: 'Faltan campos requeridos: nombre, nit.' });
     }
 
+    // El correo es opcional: solo se valida si viene con contenido, y en ese caso
+    // se envía al servicio sin espacios al inicio ni al final.
+    const correoEnviado = correo !== undefined && correo !== null && correo !== '';
+    if (correoEnviado && !esCorreoValido(correo)) {
+      return res.status(400).json({ message: 'El correo no tiene un formato válido.' });
+    }
+    const correoFinal = correoEnviado ? correo.trim() : correo;
+
     // Se desestructuran los seis campos del body en lugar de pasar req.body completo
     // para que el servicio no reciba propiedades desconocidas que podrían causar
     // columnas no permitidas en la query si el servicio construyese el SET dinámicamente.
-    const result = await negocioService.update({ nombre, nit, direccion, telefono, correo, logo_url });
+    const result = await negocioService.update({ nombre, nit, direccion, telefono, correo: correoFinal, logo_url });
 
     // A diferencia de otros servicios que retornan null, negocio.service devuelve el
     // resultado crudo del pool.query(); por eso la comprobación de existencia se hace

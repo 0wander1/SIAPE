@@ -154,6 +154,23 @@ describe('POST /api/inventario', () => {
 
     idCreado = res.body.inventario.id_inventario;
   });
+
+  test('retorna 400 con cantidad_disponible negativa', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se inserta ningún registro en la BD.
+    const res = await request(app)
+      .post('/api/inventario')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        cantidad_disponible:  -10,
+        producto_id_producto: 99999999,
+        bodega_id_bodega:     99999999,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Las cantidades deben ser números mayores o iguales a cero.');
+    expect(res.body).not.toHaveProperty('inventario');
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -175,6 +192,18 @@ describe('PUT /api/inventario/:id', () => {
     expect(Number(res.body.inventario.cantidad_minima)).toBe(8);
     // ultima_actualizacion debe haberse actualizado; basta con comprobar que existe.
     expect(res.body.inventario).toHaveProperty('ultima_actualizacion');
+  });
+
+  test('retorna 400 con cantidad_disponible negativa', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se consulta ni modifica ningún registro en la BD.
+    const res = await request(app)
+      .put('/api/inventario/99999999')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ cantidad_disponible: -10 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Las cantidades deben ser números mayores o iguales a cero.');
   });
 });
 
