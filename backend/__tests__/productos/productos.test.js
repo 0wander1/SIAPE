@@ -9,6 +9,7 @@ jest.mock('../../src/services/email.service', () => ({
 
 let token;
 let bodegaId; // Obtenido dinámicamente de la BD en beforeAll.
+let proveedorId; // Obtenido dinámicamente de la BD en beforeAll.
 let idCreado; // Guardado en POST 201, reutilizado en PUT y DELETE 200.
 
 beforeAll(async () => {
@@ -35,6 +36,10 @@ beforeAll(async () => {
   // indica un problema de datos del entorno, no un bug del código bajo prueba.
   const [rows] = await pool.query('SELECT id_bodega FROM bodega LIMIT 1');
   bodegaId = rows[0]?.id_bodega;
+
+  // Primer proveedor disponible, ahora obligatorio al crear un producto.
+  const [proveedores] = await pool.query('SELECT id_proveedor FROM proveedor LIMIT 1');
+  proveedorId = proveedores[0]?.id_proveedor;
 });
 
 afterAll(async () => {
@@ -118,6 +123,7 @@ describe('POST /api/productos', () => {
         bodega_id_bodega: bodegaId,
         cantidad:         10,
         cantidad_minima:  2,
+        proveedor_id_proveedor: proveedorId,
       });
 
     expect(res.status).toBe(201);
@@ -145,6 +151,45 @@ describe('POST /api/productos', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('valor_neto y valor_de_venta deben ser números mayores o iguales a cero.');
     expect(res.body).not.toHaveProperty('producto');
+  });
+
+  test('retorna 400 si falta el proveedor', async () => {
+    // El controlador rechaza la petición antes de llegar al servicio,
+    // por lo que no se inserta ningún registro en la BD.
+    const res = await request(app)
+      .post('/api/productos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:  'JEST-SIN-PROV',
+        valor_neto:       8000,
+        valor_de_venta:   12000,
+        bodega_id_bodega: bodegaId,
+        cantidad:         10,
+        cantidad_minima:  2,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Debes seleccionar el proveedor del producto.');
+  });
+
+  test('retorna 404 si el proveedor no existe', async () => {
+    // El servicio verifica el proveedor dentro de la transacción antes de insertar
+    // nada y hace rollback, por lo que no queda ningún registro en la BD.
+    const res = await request(app)
+      .post('/api/productos')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        nombre_producto:        'JEST-PROV-INEXISTENTE',
+        valor_neto:             8000,
+        valor_de_venta:         12000,
+        bodega_id_bodega:       bodegaId,
+        cantidad:               10,
+        cantidad_minima:        2,
+        proveedor_id_proveedor: 999999999,
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('El proveedor indicado no existe.');
   });
 });
 

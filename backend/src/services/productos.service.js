@@ -26,11 +26,9 @@ async function getById(id) {
   return rows[0] || null;
 }
 
-// Crea un producto nuevo y, en la misma llamada, crea el registro de inventario
-// inicial vinculado a ese producto y la bodega indicada. Ambas inserciones usan
-// el mismo pool sin transacción explícita porque, si la segunda falla, el producto
-// ya insertado puede corregirse manualmente; no se consideró un escenario crítico
-// que requiera rollback automático como en el módulo de pedidos.
+// Crea un producto nuevo junto con su registro de inventario inicial y su fila en
+// producto_has_proveedor con el proveedor indicado. Todo ocurre en una sola
+// transacción: si cualquier paso falla se hace rollback y no queda ningún registro a medias.
 async function create(data) {
   const {
     nombre_producto,
@@ -41,42 +39,81 @@ async function create(data) {
     bodega_id_bodega,
     cantidad,       // stock inicial que el usuario introduce al crear el producto
     cantidad_minima, // umbral de alerta de stock crítico
+    proveedor_id_proveedor, // proveedor que suministra el producto (obligatorio, lo valida el controlador)
   } = data;
 
-  // --- Primera inserción: tabla "producto" ---
-  // lote y fecha_vencimiento son opcionales; ?? null convierte undefined en null
-  // explícito para que MySQL los almacene como NULL y no falle el PreparedStatement.
-  const [result] = await pool.query(
-    `INSERT INTO producto
-      (nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [nombre_producto, valor_neto, valor_de_venta, lote ?? null, fecha_vencimiento ?? null, bodega_id_bodega]
-  );
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  // --- Segunda inserción: tabla "inventario" ---
-  // Se crea automáticamente el registro de inventario para que el producto quede
-  // vinculado a una bodega y con un stock inicial desde el momento de su creación,
-  // evitando que existan productos sin representación en el inventario.
-  //
-  // result.insertId es la PK autogenerada por MySQL para el producto recién insertado;
-  // se usa como FK en inventario (producto_id_producto).
-  //
-  // cantidad_reservada se fija en 0 literalmente: al crear el producto no hay
-  // ninguna unidad apartada para pedidos aún.
-  //
-  // Number(cantidad) || 0 convierte el valor del body a número y usa 0 si no se envió
-  // o si el valor no es numérico (NaN), garantizando que la columna nunca reciba NULL.
-  // El mismo patrón aplica a cantidad_minima.
-  await pool.query(
-    `INSERT INTO inventario
-      (cantidad_disponible, cantidad_reservada, cantidad_minima,
-       producto_id_producto, bodega_id_bodega, ultima_actualizacion)
-     VALUES (?, 0, ?, ?, ?, NOW())`,
-    [Number(cantidad) || 0, Number(cantidad_minima) || 0, result.insertId, bodega_id_bodega]
-  );
+    // --- Verificación del proveedor (solo si se envió) ---
+    // Se comprueba antes de insertar nada para responder 404 con un mensaje claro
+    // en lugar del error de FK que lanzaría MySQL en producto_has_proveedor.
+    if (proveedor_id_proveedor !== undefined && proveedor_id_proveedor !== null) {
+      const [[proveedor]] = await conn.query(
+        'SELECT id_proveedor FROM proveedor WHERE id_proveedor = ?',
+        [proveedor_id_proveedor]
+      );
+      if (!proveedor) {
+        throw Object.assign(new Error('El proveedor indicado no existe.'), { status: 404 });
+      }
+    }
 
-  // Se retorna el producto completo tal como quedó en BD usando la PK generada.
-  return getById(result.insertId);
+    // --- Primera inserción: tabla "producto" ---
+    // lote y fecha_vencimiento son opcionales; ?? null convierte undefined en null
+    // explícito para que MySQL los almacene como NULL y no falle el PreparedStatement.
+    const [result] = await conn.query(
+      `INSERT INTO producto
+        (nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [nombre_producto, valor_neto, valor_de_venta, lote ?? null, fecha_vencimiento ?? null, bodega_id_bodega]
+    );
+
+    // --- Segunda inserción: tabla "inventario" ---
+    // Se crea automáticamente el registro de inventario para que el producto quede
+    // vinculado a una bodega y con un stock inicial desde el momento de su creación,
+    // evitando que existan productos sin representación en el inventario.
+    //
+    // result.insertId es la PK autogenerada por MySQL para el producto recién insertado;
+    // se usa como FK en inventario (producto_id_producto).
+    //
+    // cantidad_reservada se fija en 0 literalmente: al crear el producto no hay
+    // ninguna unidad apartada para pedidos aún.
+    //
+    // Number(cantidad) || 0 convierte el valor del body a número y usa 0 si no se envió
+    // o si el valor no es numérico (NaN), garantizando que la columna nunca reciba NULL.
+    // El mismo patrón aplica a cantidad_minima.
+    await conn.query(
+      `INSERT INTO inventario
+        (cantidad_disponible, cantidad_reservada, cantidad_minima,
+         producto_id_producto, bodega_id_bodega, ultima_actualizacion)
+       VALUES (?, 0, ?, ?, ?, NOW())`,
+      [Number(cantidad) || 0, Number(cantidad_minima) || 0, result.insertId, bodega_id_bodega]
+    );
+
+    // --- Tercera inserción: tabla "producto_has_proveedor" (solo si se envió proveedor) ---
+    // Usa los mismos valores por defecto que insertarProductosAsociados en
+    // proveedores.service.js: precio_compra 0, es_proveedor_principal 0 y activo 1.
+    if (proveedor_id_proveedor !== undefined && proveedor_id_proveedor !== null) {
+      await conn.query(
+        `INSERT INTO producto_has_proveedor
+          (producto_id_producto, proveedor_id_proveedor, precio_compra, es_proveedor_principal, activo)
+         VALUES (?, ?, ?, ?, 1)`,
+        [result.insertId, proveedor_id_proveedor, 0, 0]
+      );
+    }
+
+    await conn.commit();
+
+    // Se retorna el producto completo tal como quedó en BD usando la PK generada.
+    // getById usa el pool, por eso se llama después del commit.
+    return getById(result.insertId);
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 // Actualiza todos los campos de un producto existente. A diferencia del update de

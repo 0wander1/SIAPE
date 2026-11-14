@@ -25,12 +25,14 @@ const emptyForm = {
   // de inventario inicial junto con el producto en la misma operación.
   cantidad:          '',
   cantidad_minima:   '0',
+  // Proveedor obligatorio al crear: el backend crea la fila en producto_has_proveedor.
+  proveedor_id_proveedor: '',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Modal de creación / edición de producto
 // ─────────────────────────────────────────────────────────────────────────────
-function ProductoModal({ onClose, onSave, bodegas, initialData }) {
+function ProductoModal({ onClose, onSave, bodegas, proveedores, initialData }) {
   // `isEdit` distingue los dos modos del modal.
   // En edición, `initialData` contiene los valores normalizados por openEdit();
   // en creación, el formulario parte de emptyForm.
@@ -138,6 +140,26 @@ function ProductoModal({ onClose, onSave, bodegas, initialData }) {
           </FormRow>
         )}
 
+        {/* El proveedor solo se elige al crear; en edición la relación se gestiona
+            desde la página de Proveedores. */}
+        {!isEdit && (
+          <FormField label='Proveedor' required>
+            <Select
+              name='proveedor_id_proveedor'
+              value={form.proveedor_id_proveedor}
+              onChange={handleChange}
+              required
+            >
+              <option value=''>Seleccionar proveedor...</option>
+              {proveedores.map((p) => (
+                <option key={p.id_proveedor} value={p.id_proveedor}>
+                  {p.nombre_proveedor}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        )}
+
         <FormField label='Bodega' required>
           <Select
             name='bodega_id_bodega'
@@ -233,6 +255,8 @@ function Productos() {
   const [productos, setProductos] = useState([]);
   // `bodegas` se carga al montar para poblar el select del modal.
   const [bodegas, setBodegas]     = useState([]);
+  // `proveedores` se carga al montar para poblar el select de proveedor del modal.
+  const [proveedores, setProveedores] = useState([]);
   const [search, setSearch]       = useState('');
   const [showModal, setShowModal] = useState(false);
 
@@ -260,6 +284,10 @@ function Productos() {
 
     api.get('/bodegas')
       .then(({ data }) => setBodegas(data))
+      .catch(() => {});
+
+    api.get('/proveedores')
+      .then(({ data }) => setProveedores(data))
       .catch(() => {});
   }, []);
 
@@ -325,6 +353,7 @@ function Productos() {
           ...payload,
           cantidad:        Number(form.cantidad),
           cantidad_minima: Number(form.cantidad_minima) || 0,
+          proveedor_id_proveedor: Number(form.proveedor_id_proveedor),
         });
       }
       // Recarga la lista completa desde el servidor para reflejar el nuevo
@@ -517,6 +546,7 @@ function Productos() {
           onClose={closeModal}
           onSave={handleSave}
           bodegas={bodegas}
+          proveedores={proveedores}
           initialData={initialData}
         />
       )}

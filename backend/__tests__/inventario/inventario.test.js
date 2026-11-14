@@ -43,6 +43,10 @@ beforeAll(async () => {
   bodegaId  = bodegas[0].id_bodega;
   bodegaId2 = bodegas[1].id_bodega;
 
+  // Primer proveedor disponible, ahora obligatorio al crear un producto.
+  const [proveedores] = await pool.query('SELECT id_proveedor FROM proveedor LIMIT 1');
+  const proveedorId = proveedores[0]?.id_proveedor;
+
   // Se crea un producto propio en lugar de reutilizar uno existente, para que los
   // tests no dependan de datos reales ni borren productos que ya estaban en la BD.
   const productoRes = await request(app)
@@ -55,6 +59,7 @@ beforeAll(async () => {
       bodega_id_bodega: bodegaId,
       cantidad:         0,
       cantidad_minima:  0,
+      proveedor_id_proveedor: proveedorId,
     });
 
   if (productoRes.status !== 201) {

@@ -27,8 +27,9 @@ async function getById(req, res, next) {
   }
 }
 
-// Crea un nuevo producto. Valida que los cuatro campos obligatorios estén presentes
-// antes de invocar al servicio, que además creará el registro de inventario inicial.
+// Crea un nuevo producto. Valida que los cuatro campos obligatorios estén presentes,
+// además del proveedor (proveedor_id_proveedor), antes de invocar al servicio, que
+// creará también el registro de inventario inicial y la relación con el proveedor.
 async function create(req, res, next) {
   try {
     const { nombre_producto, valor_neto, valor_de_venta, bodega_id_bodega } = req.body;
@@ -57,6 +58,19 @@ async function create(req, res, next) {
       return res.status(400).json({
         message: 'cantidad y cantidad_minima deben ser números mayores o iguales a cero.',
       });
+    }
+
+    // proveedor_id_proveedor es obligatorio: debe ser un número o un string numérico
+    // que represente un entero mayor que 0. Se rechazan booleanos, arreglos y objetos,
+    // que Number() podría convertir en un entero válido (p. ej. true → 1).
+    const { proveedor_id_proveedor } = req.body;
+    const proveedorValido =
+      (typeof proveedor_id_proveedor === 'number' ||
+        (typeof proveedor_id_proveedor === 'string' && proveedor_id_proveedor.trim() !== '')) &&
+      Number.isInteger(Number(proveedor_id_proveedor)) &&
+      Number(proveedor_id_proveedor) > 0;
+    if (!proveedorValido) {
+      return res.status(400).json({ message: 'Debes seleccionar el proveedor del producto.' });
     }
 
     // Se pasa req.body completo para que el servicio reciba también los campos opcionales:
