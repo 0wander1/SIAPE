@@ -242,7 +242,11 @@ function Proveedores() {
       productos:  (p.productos_asociados ?? []).map((pa) => {
         const prod = inventario.find((i) => (i.id_producto ?? i.id) == pa.producto_id_producto);
         const nombre = prod ? (prod.nombre_producto ?? prod.nombre) : String(pa.producto_id_producto);
-        return { nombre, esPrincipal: pa.esPrincipal ?? false };
+        return {
+          id:          pa.producto_id_producto,
+          nombre,
+          esPrincipal: Number(pa.es_proveedor_principal) === 1,
+        };
       }),
     });
     setEditando(p.id_proveedor);
@@ -288,7 +292,10 @@ function Proveedores() {
     // objetos { producto_id_producto } buscando el ID en el estado `inventario`.
     // Los nombres que no tienen match en inventario se descartan con filter(Boolean).
     const productos_asociados = form.productos
-      .map(({ nombre, esPrincipal }) => {
+      .map(({ id, nombre, esPrincipal }) => {
+        // Productos que ya venían asociados (abiertos con openEdit) traen su id:
+        // se usa directamente sin depender de encontrar el nombre en `inventario`.
+        if (id != null) return { producto_id_producto: id, esPrincipal };
         const prod = inventario.find(
           (i) => (i.nombre_producto ?? i.nombre) === nombre
         );

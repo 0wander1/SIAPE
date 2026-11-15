@@ -263,11 +263,47 @@ async function update(id, data) {
       }
     }
 
-    await conn.query(
-      'DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?',
+    // Se eliminan solo las relaciones cuyo producto ya no viene en productos_asociados.
+    // Si el arreglo llega vacío se eliminan todas las relaciones del proveedor.
+    // conn.query expande el arreglo de ids dentro de NOT IN (?).
+    const idsProductos = productos_asociados.map((pa) => pa.producto_id_producto);
+    if (idsProductos.length === 0) {
+      await conn.query(
+        'DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?',
+        [id]
+      );
+    } else {
+      await conn.query(
+        'DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ? AND producto_id_producto NOT IN (?)',
+        [id, idsProductos]
+      );
+    }
+
+    // Solo se insertan los productos de la lista que todavía no tienen relación con
+    // este proveedor; las relaciones existentes se conservan sin tocar sus datos.
+    // Los ids se comparan como Number porque el body puede traerlos como string.
+    const [existentes] = await conn.query(
+      'SELECT producto_id_producto FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?',
       [id]
     );
-    await insertarProductosAsociados(conn, id, productos_asociados);
+    const idsExistentes = new Set(existentes.map((r) => Number(r.producto_id_producto)));
+    const nuevos = productos_asociados.filter(
+      (pa) => !idsExistentes.has(Number(pa.producto_id_producto))
+    );
+    await insertarProductosAsociados(conn, id, nuevos);
+
+    // En las relaciones que ya existían solo se actualiza la marca de proveedor
+    // principal, y solo si el elemento trae esPrincipal como booleano. Precio,
+    // tiempo de entrega, fechas y activo se conservan.
+    for (const pa of productos_asociados) {
+      if (!idsExistentes.has(Number(pa.producto_id_producto))) continue;
+      if (typeof pa.esPrincipal !== 'boolean') continue;
+      await conn.query(
+        `UPDATE producto_has_proveedor SET es_proveedor_principal = ?
+         WHERE proveedor_id_proveedor = ? AND producto_id_producto = ?`,
+        [pa.esPrincipal ? 1 : 0, id, pa.producto_id_producto]
+      );
+    }
 
     await conn.commit();
     return getById(id);

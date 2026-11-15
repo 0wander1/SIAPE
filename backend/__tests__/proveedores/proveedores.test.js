@@ -168,6 +168,96 @@ describe('PUT /api/proveedores/:id', () => {
     // Limpieza: se elimina el proveedor auxiliar creado solo para esta prueba.
     await pool.query('DELETE FROM proveedor WHERE id_proveedor = ?', [otroId]);
   });
+
+  test('retorna 200 conservando la relación existente sin duplicarla ni cambiar su precio', async () => {
+    // Proveedor propio creado directamente en la BD, con nombre y NIT únicos.
+    const sufijo = Date.now();
+    const [provResult] = await pool.query(
+      'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
+      [`Proveedor Jest Relacion ${sufijo}`, `NIT_JEST_REL_${sufijo}`, adminId]
+    );
+    const proveedorId = provResult.insertId;
+
+    try {
+      // Relación previa con un precio de compra distinto del valor por defecto (0).
+      await pool.query(
+        `INSERT INTO producto_has_proveedor
+           (producto_id_producto, proveedor_id_proveedor, precio_compra, es_proveedor_principal, activo)
+         VALUES (?, ?, 4500, 0, 1)`,
+        [productoId, proveedorId]
+      );
+
+      // Se edita el proveedor enviando el mismo producto; el servicio debe conservar
+      // la relación existente en lugar de borrarla y volver a crearla.
+      const res = await request(app)
+        .put(`/api/proveedores/${proveedorId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          productos_asociados: [
+            { producto_id_producto: productoId, esPrincipal: false },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+
+      const [relaciones] = await pool.query(
+        'SELECT precio_compra FROM producto_has_proveedor WHERE proveedor_id_proveedor = ? AND producto_id_producto = ?',
+        [proveedorId, productoId]
+      );
+      expect(relaciones).toHaveLength(1);
+      expect(Number(relaciones[0].precio_compra)).toBe(4500);
+    } finally {
+      // Se borran primero las relaciones por la FK hacia proveedor.
+      await pool.query('DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?', [proveedorId]);
+      await pool.query('DELETE FROM proveedor WHERE id_proveedor = ?', [proveedorId]);
+    }
+  });
+
+  test('retorna 200 marcando como principal una relación existente sin cambiar su precio', async () => {
+    // Proveedor propio creado directamente en la BD, con nombre y NIT únicos.
+    const sufijo = Date.now();
+    const [provResult] = await pool.query(
+      'INSERT INTO proveedor (nombre_proveedor, NIT, id_usuario_trab) VALUES (?, ?, ?)',
+      [`Proveedor Jest Principal ${sufijo}`, `NIT_JEST_PRIN_${sufijo}`, adminId]
+    );
+    const proveedorId = provResult.insertId;
+
+    try {
+      // Relación previa que no es principal y tiene un precio distinto del valor por defecto.
+      await pool.query(
+        `INSERT INTO producto_has_proveedor
+           (producto_id_producto, proveedor_id_proveedor, precio_compra, es_proveedor_principal, activo)
+         VALUES (?, ?, 4500, 0, 1)`,
+        [productoId, proveedorId]
+      );
+
+      // Se edita enviando el mismo producto con esPrincipal: true; el servicio debe
+      // actualizar solo la marca de principal en la relación existente.
+      const res = await request(app)
+        .put(`/api/proveedores/${proveedorId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          productos_asociados: [
+            { producto_id_producto: productoId, esPrincipal: true },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+
+      const [relaciones] = await pool.query(
+        `SELECT precio_compra, es_proveedor_principal FROM producto_has_proveedor
+         WHERE proveedor_id_proveedor = ? AND producto_id_producto = ?`,
+        [proveedorId, productoId]
+      );
+      expect(relaciones).toHaveLength(1);
+      expect(Number(relaciones[0].es_proveedor_principal)).toBe(1);
+      expect(Number(relaciones[0].precio_compra)).toBe(4500);
+    } finally {
+      // Se borran primero las relaciones por la FK hacia proveedor.
+      await pool.query('DELETE FROM producto_has_proveedor WHERE proveedor_id_proveedor = ?', [proveedorId]);
+      await pool.query('DELETE FROM proveedor WHERE id_proveedor = ?', [proveedorId]);
+    }
+  });
 });
 
 // ─────────────────────────────────────────────
