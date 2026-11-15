@@ -284,3 +284,141 @@ describe('DELETE /api/inventario/:id', () => {
     expect(res.body.message).toBe('El producto no corresponde al registro de inventario.');
   });
 });
+
+// ─────────────────────────────────────────────
+// POST /api/inventario/carga-masiva
+// ─────────────────────────────────────────────
+describe('POST /api/inventario/carga-masiva', () => {
+  test('no crea nada si la fila de un producto nuevo no trae proveedor_id_proveedor', async () => {
+    // El nombre único garantiza que el producto no exista, así que el servicio
+    // entra en la rama de creación y debe rechazar la fila antes de cualquier INSERT.
+    const nombre = `JEST-CARGA-SINPROV-${Date.now()}`;
+
+    const res = await request(app)
+      .post('/api/inventario/carga-masiva')
+      .set('Authorization', `Bearer ${token}`)
+      .send([
+        {
+          nombre_producto:     nombre,
+          bodega_id_bodega:    bodegaId,
+          cantidad_disponible: 5,
+        },
+      ]);
+
+    expect(res.status).toBe(200);
+    expect(res.body.creados).toBe(0);
+    expect(res.body.actualizados).toBe(0);
+    expect(res.body.errores).toContain(
+      'Fila 2: proveedor_id_proveedor es requerido para crear un producto nuevo.'
+    );
+
+    const [productos] = await pool.query(
+      'SELECT id_producto FROM producto WHERE nombre_producto = ?',
+      [nombre]
+    );
+    expect(productos).toHaveLength(0);
+  });
+
+  test('no crea nada si el proveedor de un producto nuevo no existe', async () => {
+    // El servicio comprueba el proveedor antes del INSERT del producto, hace
+    // rollback de la fila y la registra en errores.
+    const nombre = `JEST-CARGA-PROVINEX-${Date.now()}`;
+
+    const res = await request(app)
+      .post('/api/inventario/carga-masiva')
+      .set('Authorization', `Bearer ${token}`)
+      .send([
+        {
+          nombre_producto:        nombre,
+          bodega_id_bodega:       bodegaId,
+          cantidad_disponible:    5,
+          proveedor_id_proveedor: 999999999,
+        },
+      ]);
+
+    expect(res.status).toBe(200);
+    expect(res.body.creados).toBe(0);
+    expect(res.body.actualizados).toBe(0);
+    expect(res.body.errores).toContain('Fila 2: el proveedor con ID 999999999 no existe.');
+
+    const [productos] = await pool.query(
+      'SELECT id_producto FROM producto WHERE nombre_producto = ?',
+      [nombre]
+    );
+    expect(productos).toHaveLength(0);
+  });
+
+  test('retorna 200 creando producto, inventario y relación con el proveedor', async () => {
+    const nombre = `JEST-CARGA-OK-${Date.now()}`;
+
+    // Proveedor existente leído de la BD, sin ids fijos. bodegaId también se obtuvo
+    // con pool.query en el beforeAll.
+    const [[proveedor]] = await pool.query('SELECT id_proveedor FROM proveedor LIMIT 1');
+    if (!proveedor) {
+      throw new Error('inventario.test.js necesita al menos 1 proveedor en la base de datos.');
+    }
+    const proveedorId = proveedor.id_proveedor;
+
+    let idProducto;
+    try {
+      const res = await request(app)
+        .post('/api/inventario/carga-masiva')
+        .set('Authorization', `Bearer ${token}`)
+        .send([
+          {
+            nombre_producto:        nombre,
+            bodega_id_bodega:       bodegaId,
+            cantidad_disponible:    7,
+            proveedor_id_proveedor: proveedorId,
+          },
+        ]);
+
+      expect(res.status).toBe(200);
+      expect(res.body.creados).toBe(1);
+      expect(res.body.errores).toEqual([]);
+
+      const [[producto]] = await pool.query(
+        'SELECT id_producto FROM producto WHERE nombre_producto = ?',
+        [nombre]
+      );
+      expect(producto).toBeDefined();
+      idProducto = producto.id_producto;
+
+      const [inventario] = await pool.query(
+        'SELECT cantidad_disponible FROM inventario WHERE producto_id_producto = ? AND bodega_id_bodega = ?',
+        [idProducto, bodegaId]
+      );
+      expect(inventario).toHaveLength(1);
+      expect(Number(inventario[0].cantidad_disponible)).toBe(7);
+
+      const [relacion] = await pool.query(
+        'SELECT 1 FROM producto_has_proveedor WHERE producto_id_producto = ? AND proveedor_id_proveedor = ?',
+        [idProducto, proveedorId]
+      );
+      expect(relacion).toHaveLength(1);
+    } finally {
+      // Se borra por nombre para limpiar aunque el test haya fallado antes de leer el id.
+      // Las FK de inventario y producto_has_proveedor hacia producto son ON DELETE CASCADE.
+      await pool.query('DELETE FROM producto WHERE nombre_producto = ?', [nombre]);
+    }
+
+    // Comprueba que la limpieza no dejó nada.
+    const [productosRestantes] = await pool.query(
+      'SELECT id_producto FROM producto WHERE nombre_producto = ?',
+      [nombre]
+    );
+    expect(productosRestantes).toHaveLength(0);
+
+    const [inventarioRestante] = await pool.query(
+      'SELECT id_inventario FROM inventario WHERE producto_id_producto = ?',
+      [idProducto]
+    );
+    expect(inventarioRestante).toHaveLength(0);
+
+    const [relacionRestante] = await pool.query(
+      'SELECT 1 FROM producto_has_proveedor WHERE producto_id_producto = ?',
+      [idProducto]
+    );
+    expect(relacionRestante).toHaveLength(0);
+  });
+});

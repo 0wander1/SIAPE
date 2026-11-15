@@ -219,6 +219,28 @@ async function cargaMasiva(filas) {
           // datos que el usuario pudo haber ajustado manualmente en la BD.
           producto_id_producto = productoExistente.id_producto;
         } else {
+          // Para crear un producto nuevo la fila debe traer un proveedor válido
+          // (entero mayor que 0). Si no, se revierte la transacción de esta fila
+          // (solo se hizo un SELECT) y se pasa a la siguiente sin crear nada.
+          const proveedor_id_proveedor = Number(fila.proveedor_id_proveedor);
+          if (!Number.isInteger(proveedor_id_proveedor) || proveedor_id_proveedor <= 0) {
+            await conn.rollback();
+            errores.push(`Fila ${i + 2}: proveedor_id_proveedor es requerido para crear un producto nuevo.`);
+            continue;
+          }
+
+          // El proveedor debe existir antes de crear el producto. Si no existe se
+          // revierte la transacción de esta fila y se pasa a la siguiente.
+          const [[proveedorExistente]] = await conn.query(
+            'SELECT id_proveedor FROM proveedor WHERE id_proveedor = ?',
+            [proveedor_id_proveedor]
+          );
+          if (!proveedorExistente) {
+            await conn.rollback();
+            errores.push(`Fila ${i + 2}: el proveedor con ID ${proveedor_id_proveedor} no existe.`);
+            continue;
+          }
+
           // El producto no existe: se crea con los valores mínimos extraídos de la fila.
           // valor_neto, valor_de_venta, lote y fecha_vencimiento son opcionales en el Excel;
           // si no se enviaron se insertaron como 0 o null respectivamente (ver conversión arriba).
@@ -229,6 +251,14 @@ async function cargaMasiva(filas) {
             [nombre_producto, valor_neto, valor_de_venta, lote, fecha_vencimiento, bodega_id_bodega]
           );
           producto_id_producto = prodResult.insertId;
+
+          // Se asocia el producto nuevo a su proveedor en la misma transacción de la fila.
+          await conn.query(
+            `INSERT INTO producto_has_proveedor
+               (producto_id_producto, proveedor_id_proveedor, precio_compra, es_proveedor_principal, activo)
+             VALUES (?, ?, 0, 0, 1)`,
+            [producto_id_producto, proveedor_id_proveedor]
+          );
         }
 
         // --- Paso 2: Buscar el registro de inventario para ese producto y bodega ---
